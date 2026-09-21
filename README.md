@@ -1,36 +1,130 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GetItDone
 
-## Getting Started
+A full-stack task manager: sign up, organize tasks into lists, set due dates and priorities, and drag tasks into the order you want. Built with Next.js, TypeScript, PostgreSQL and Prisma, with hand-rolled JWT authentication.
 
-First, run the development server:
+**Live demo:** _coming soon_ · Click **"Try the live demo"** to get a private sandbox with sample data. No sign-up needed.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+![GetItDone landing page](docs/screenshots/landing-light.png)
+
+| Today view (dark) | List view with drag-and-drop | Mobile |
+| --- | --- | --- |
+| ![Today view](docs/screenshots/today-dark.png) | ![List view](docs/screenshots/list-light.png) | ![Mobile view](docs/screenshots/mobile-dark.png) |
+
+## Features
+
+- **Authentication:** sign up, log in, log out. Sessions are signed JWTs in `httpOnly` cookies, and passwords are hashed with bcrypt.
+- **Lists and tasks (full CRUD):** create, rename, recolor and delete lists. Tasks have titles, notes, due dates and priorities, and can move between lists.
+- **Smart views:** Today (including overdue), Upcoming (grouped by day), Completed, and search across all tasks.
+- **Drag-and-drop reordering** with mouse, touch or keyboard (dnd-kit).
+- **Instant UI:** optimistic updates with TanStack Query, rolled back automatically if the server rejects a change.
+- **Responsive:** sidebar on desktop, slide-out drawer on mobile.
+- **Dark mode:** follows the system setting or a manual choice.
+- **One-click demo:** each visitor gets an isolated sandbox account, and demo accounts are cleaned up after 24 hours.
+
+## Tech stack
+
+| Layer | Tools |
+| --- | --- |
+| Framework | Next.js 16 (App Router, Route Handlers, Proxy), React 19, TypeScript |
+| UI | Tailwind CSS v4, shadcn/ui (Radix), lucide-react, next-themes, sonner |
+| Data fetching | TanStack Query |
+| Validation | Zod, with schemas shared by the client and server |
+| Database | PostgreSQL (Neon), Prisma 7 ORM with the `pg` driver adapter |
+| Auth | `jose` (JWT, HS256), `bcryptjs` |
+| Testing | Vitest (unit and API integration), Playwright (end-to-end, desktop and mobile) |
+| CI/CD | GitHub Actions, Vercel |
+
+## Architecture
+
+```mermaid
+flowchart LR
+  B[Browser<br/>React + TanStack Query] -- "fetch /api/* (JSON)<br/>httpOnly session cookie" --> P
+  subgraph Next.js on Vercel
+    P[proxy.ts<br/>JWT check for /app/*] --> R[Route Handlers<br/>/api/auth, /api/lists, /api/tasks]
+    R --> V[Zod validation]
+    R --> A[Session: jose JWT<br/>+ user lookup]
+    R --> O[Prisma Client]
+  end
+  O -- SQL --> D[(PostgreSQL<br/>Neon)]
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Security decisions
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Token storage:** the JWT lives in an `httpOnly`, `Secure`, `SameSite=Lax` cookie, so page scripts can't read it (unlike `localStorage`).
+- **CSRF:** `SameSite=Lax` cookies, plus a server-side `Origin` check on every state-changing request.
+- **Authorization:** every query filters by the signed-in user's id. Requesting another user's list or task returns `404`, so the API doesn't even reveal that it exists. This is covered by a dedicated integration test.
+- **No user enumeration:** login returns the same error, in about the same time, for unknown emails and wrong passwords.
+- **Defense in depth:** the proxy only checks that the JWT is valid. The app layout and every API route still load the user from the database.
+- **Validated input:** all input goes through Zod on the server, with the same schemas reused on the client for instant form feedback.
+- **Safe redirects:** the `?next=` redirect after login only allows same-site paths.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## API
 
-## Learn More
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `POST` | `/api/auth/register` | Create an account and start a session |
+| `POST` | `/api/auth/login` | Log in |
+| `POST` | `/api/auth/logout` | End the session |
+| `POST` | `/api/auth/demo` | Create a sandbox demo account |
+| `GET` | `/api/auth/me` | Current user |
+| `GET` / `POST` | `/api/lists` | List all lists (with open-task counts) / create a list |
+| `GET` / `PATCH` / `DELETE` | `/api/lists/:id` | Read / update / delete a list (deleting a list deletes its tasks) |
+| `GET` / `POST` | `/api/tasks?listId=&view=all\|today\|upcoming\|completed&q=&today=YYYY-MM-DD` | Query tasks / create a task |
+| `GET` / `PATCH` / `DELETE` | `/api/tasks/:id` | Read / update / delete a task |
+| `POST` | `/api/tasks/reorder` | Save a new order for a list's tasks |
 
-To learn more about Next.js, take a look at the following resources:
+Errors use one consistent shape: `{ "error": { "message": string, "fieldErrors"?: Record<string, string[]> } }`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Getting started
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+**Requirements:** Node.js 20.9+ and a PostgreSQL database. A free [Neon](https://neon.tech) database works, or use Docker with the included `docker-compose.yml`.
 
-## Deploy on Vercel
+```bash
+git clone <your-repo-url> getitdone
+cd getitdone
+npm install
+cp .env.example .env        # then fill in DATABASE_URL and JWT_SECRET
+npx prisma migrate dev      # create the tables
+npm run db:seed             # optional: demo@getitdone.dev / password123
+npm run dev                 # http://localhost:3000
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+If you're using Docker instead of Neon, start the local database with `npm run db:up` before running the migration.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Scripts
+
+| Script | What it does |
+| --- | --- |
+| `npm run dev` | Start the dev server |
+| `npm run build` / `npm start` | Production build / server |
+| `npm run lint` / `npm run typecheck` | ESLint / TypeScript checks |
+| `npm test` | Unit and API integration tests (Vitest, needs a database) |
+| `npm run test:e2e` | End-to-end browser tests (Playwright) |
+| `npm run db:migrate` / `db:seed` / `db:studio` | Prisma migrations / seed data / database GUI |
+
+## Testing
+
+- **Unit tests:** validation rules, JWT signing and verification (tampering, wrong secret, expiry), password hashing, date formatting, redirect safety.
+- **API integration tests:** run the real route handlers against a real database, covering auth flows, CRUD, filters, reordering, cross-origin blocking, and **data isolation between users**.
+- **End-to-end tests:** sign up → create a list → add, complete, edit and delete tasks → reload → log out → log back in, plus the demo flow. They run on both desktop and mobile viewports.
+
+CI runs everything on each push against a throwaway Postgres container.
+
+## Project structure
+
+```
+src/
+  app/
+    (auth)/login, register     # auth pages
+    app/                       # the signed-in app (today, upcoming, completed, lists/[id], search)
+    api/                       # REST route handlers
+    page.tsx                   # landing page
+  components/                  # app shell, sidebar, task components, shadcn/ui
+  hooks/                       # TanStack Query hooks with optimistic updates
+  lib/                         # auth, db client, validation, API helpers
+  proxy.ts                     # protects /app/* routes
+prisma/                        # schema, migrations, seed
+tests/                         # Vitest unit and integration tests
+e2e/                           # Playwright tests
+```
+

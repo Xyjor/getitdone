@@ -1,0 +1,59 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  lists List[]
+  tasks Task[]
+}
+
+model List {
+  id        String   @id @default(cuid())
+  name      String
+  color     String   @default("slate")
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks  Task[]
+
+  @@index([userId, position])
+}
+
+model Task {
+  id        String    @id @default(cuid())
+  title     String
+  notes     String?
+  completed Boolean   @default(false)
+  dueDate   DateTime? @db.Date
+  priority  Priority  @default(MEDIUM)
+  position  Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  listId String
+  list   List   @relation(fields: [listId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([listId, position])
+}
