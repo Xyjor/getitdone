@@ -1,5 +1,7 @@
 # GetItDone
 
+[![CI](https://github.com/Xyjor/getitdone/actions/workflows/ci.yml/badge.svg)](https://github.com/Xyjor/getitdone/actions/workflows/ci.yml)
+
 A full-stack task manager: sign up, organize tasks into lists, set due dates and priorities, and drag tasks into the order you want. Built with Next.js, TypeScript, PostgreSQL and Prisma, with hand-rolled JWT authentication.
 
 **Live demo:** _coming soon_ · Click **"Try the live demo"** to get a private sandbox with sample data. No sign-up needed.
@@ -80,7 +82,7 @@ Errors use one consistent shape: `{ "error": { "message": string, "fieldErrors"?
 **Requirements:** Node.js 20.9+ and a PostgreSQL database. A free [Neon](https://neon.tech) database works, or use Docker with the included `docker-compose.yml`.
 
 ```bash
-git clone <your-repo-url> getitdone
+git clone https://github.com/Xyjor/getitdone.git
 cd getitdone
 npm install
 cp .env.example .env        # then fill in DATABASE_URL and JWT_SECRET
