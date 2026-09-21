@@ -4,7 +4,7 @@
 
 A full-stack task manager: sign up, organize tasks into lists, set due dates and priorities, and drag tasks into the order you want. Built with Next.js, TypeScript, PostgreSQL and Prisma, with hand-rolled JWT authentication.
 
-**Live demo:** _coming soon_ · Click **"Try the live demo"** to get a private sandbox with sample data. No sign-up needed.
+**🔗 Live demo: [getitdone-plum.vercel.app](https://getitdone-plum.vercel.app)** · Click **"Try the live demo"** to get a private sandbox with sample data. No sign-up needed.
 
 ![GetItDone landing page](docs/screenshots/landing-light.png)
 
