@@ -82,7 +82,7 @@ export async function createSampleData(db: Db, userId: string) {
         dueDate: t.due === undefined ? null : daysFromToday(t.due),
         position: i,
         listId: listIdAt.get(listIndex)!,
-        userId,
+        createdById: userId,
       })),
     ),
   });

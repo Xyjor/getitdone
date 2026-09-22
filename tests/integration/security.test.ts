@@ -268,10 +268,12 @@ describe("rate limiting", () => {
   });
 
   it("treats addresses in the same IPv6 /64 as one client", async () => {
-    for (let i = 1; i <= 5; i++) await signUp("v6", `2001:db8:abcd:12::${i}`);
+    // A fresh /64 per run, so counts from earlier runs within the hour don't interfere.
+    const prefix = `2001:db8:${Math.floor(Math.random() * 0xffff).toString(16)}:12`;
+    for (let i = 1; i <= 5; i++) await signUp("v6", `${prefix}::${i}`);
     const res = await call(register.POST, {
       method: "POST",
-      ip: "2001:db8:abcd:12::99",
+      ip: `${prefix}::99`,
       body: { name: "Rotating", email: uniqueEmail("v6"), password: PASSWORD },
     });
     expect(res.status).toBe(429);

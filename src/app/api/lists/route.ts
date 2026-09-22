@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { parseBody, requireUser, route, toListDTO } from "@/lib/api";
+import { accessibleListsWhere } from "@/lib/access";
 import { listCreateSchema } from "@/lib/validations";
 
 export const GET = route(async () => {
   const user = await requireUser();
 
   const lists = await db.list.findMany({
-    where: { userId: user.id },
+    where: accessibleListsWhere(user.id),
     orderBy: [{ position: "asc" }, { createdAt: "asc" }],
     include: { _count: { select: { tasks: { where: { completed: false } } } } },
   });
