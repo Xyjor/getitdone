@@ -2,7 +2,16 @@ import type { ListColor, PriorityValue } from "./validations";
 
 // JSON shapes returned by the API. Safe to import from client components.
 
-export type UserDTO = { id: string; name: string; email: string };
+export type UserDTO = { id: string; name: string; email: string; isDemo: boolean };
+
+export type SessionDTO = {
+  id: string;
+  /** e.g. "Chrome on Windows" */
+  device: string;
+  current: boolean;
+  createdAt: string;
+  lastSeenAt: string;
+};
 
 export type ListDTO = {
   id: string;

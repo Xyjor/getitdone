@@ -11,16 +11,25 @@ export class ApiError extends Error {
     public status: number,
     message: string,
     public fieldErrors?: Record<string, string[]>,
+    public headers?: Record<string, string>,
   ) {
     super(message);
   }
 }
 
+export const forbidden = (message = "You don't have permission to do that") =>
+  new ApiError(403, message);
+
 export const notFound = (what = "Resource") => new ApiError(404, `${what} not found`);
 
-function errorResponse(status: number, message: string, fieldErrors?: Record<string, string[]>) {
+function errorResponse(
+  status: number,
+  message: string,
+  fieldErrors?: Record<string, string[]>,
+  headers?: Record<string, string>,
+) {
   const body: ApiErrorBody = { error: { message, ...(fieldErrors && { fieldErrors }) } };
-  return NextResponse.json(body, { status });
+  return NextResponse.json(body, { status, headers });
 }
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -46,7 +55,9 @@ export function route<C>(handler: Handler<C>): Handler<C> {
       assertSameOrigin(req);
       return await handler(req, ctx);
     } catch (err) {
-      if (err instanceof ApiError) return errorResponse(err.status, err.message, err.fieldErrors);
+      if (err instanceof ApiError) {
+        return errorResponse(err.status, err.message, err.fieldErrors, err.headers);
+      }
       if (err instanceof ZodError) {
         const { fieldErrors, formErrors } = z.flattenError(err);
         return errorResponse(

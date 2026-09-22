@@ -16,6 +16,7 @@ import {
   Pencil,
   Plus,
   Search,
+  Settings,
   Sun,
   Trash2,
   type LucideIcon,
@@ -301,6 +302,11 @@ function UserMenu({ user }: { user: UserDTO }) {
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/app/settings">
+            <Settings /> Settings
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={logout}>
           <LogOut /> Log out
         </DropdownMenuItem>

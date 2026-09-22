@@ -15,6 +15,8 @@ A full-stack task manager: sign up, organize tasks into lists, set due dates and
 ## Features
 
 - **Authentication:** sign up, log in, log out. Sessions are signed JWTs in `httpOnly` cookies, and passwords are hashed with bcrypt.
+- **Revocable sessions and account settings:** see every signed-in device, sign out any of them, log out everywhere, change your password (other devices are signed out), and delete your account.
+- **Rate limiting:** brute-force protection on login, sign-up and the demo, stored in Postgres (no paid service).
 - **Lists and tasks (full CRUD):** create, rename, recolor and delete lists. Tasks have titles, notes, due dates and priorities, and can move between lists.
 - **Smart views:** Today (including overdue), Upcoming (grouped by day), Completed, and search across all tasks.
 - **Drag-and-drop reordering** with mouse, touch or keyboard (dnd-kit).
@@ -56,6 +58,8 @@ flowchart LR
 - **CSRF:** `SameSite=Lax` cookies, plus a server-side `Origin` check on every state-changing request.
 - **Authorization:** every query filters by the signed-in user's id. Requesting another user's list or task returns `404`, so the API doesn't even reveal that it exists. This is covered by a dedicated integration test.
 - **No user enumeration:** login returns the same error, in about the same time, for unknown emails and wrong passwords.
+- **Revocable sessions:** each JWT names a `Session` row and is only honoured while that row exists. Logging out deletes the row, so a copied token stops working immediately. Changing the password revokes every other session.
+- **Rate limiting:** a single atomic Postgres upsert per check (fixed window). Login is limited per IP and per account (5 failures per 15 minutes, reset on success), and sign-up and demo are limited per IP. Responses are `429` with `Retry-After`. Keys are SHA-256 hashed, so no raw IPs or emails are stored.
 - **Defense in depth:** the proxy only checks that the JWT is valid. The app layout and every API route still load the user from the database.
 - **Validated input:** all input goes through Zod on the server, with the same schemas reused on the client for instant form feedback.
 - **Safe redirects:** the `?next=` redirect after login only allows same-site paths.
@@ -69,6 +73,12 @@ flowchart LR
 | `POST` | `/api/auth/logout` | End the session |
 | `POST` | `/api/auth/demo` | Create a sandbox demo account |
 | `GET` | `/api/auth/me` | Current user |
+| `POST` | `/api/auth/logout-all` | End every session of the user |
+| `PATCH` / `DELETE` | `/api/account` | Change name / delete account (password confirmation) |
+| `POST` | `/api/account/password` | Change password (signs out other devices) |
+| `GET` | `/api/account/sessions` | Signed-in devices |
+| `DELETE` | `/api/account/sessions/:id` | Sign out one device |
+| `GET` | `/api/cron/cleanup` | Daily cleanup of expired sessions, stale rate-limit rows and old demo accounts (Vercel Cron, `CRON_SECRET`) |
 | `GET` / `POST` | `/api/lists` | List all lists (with open-task counts) / create a list |
 | `GET` / `PATCH` / `DELETE` | `/api/lists/:id` | Read / update / delete a list (deleting a list deletes its tasks) |
 | `GET` / `POST` | `/api/tasks?listId=&view=all\|today\|upcoming\|completed&q=&today=YYYY-MM-DD` | Query tasks / create a task |
@@ -85,7 +95,7 @@ Errors use one consistent shape: `{ "error": { "message": string, "fieldErrors"?
 git clone https://github.com/Xyjor/getitdone.git
 cd getitdone
 npm install
-cp .env.example .env        # then fill in DATABASE_URL and JWT_SECRET
+cp .env.example .env        # then fill in DATABASE_URL, JWT_SECRET and CRON_SECRET
 npx prisma migrate dev      # create the tables
 npm run db:seed             # optional: demo@getitdone.dev / password123
 npm run dev                 # http://localhost:3000
@@ -107,8 +117,8 @@ If you're using Docker instead of Neon, start the local database with `npm run d
 ## Testing
 
 - **Unit tests:** validation rules, JWT signing and verification (tampering, wrong secret, expiry), password hashing, date formatting, redirect safety.
-- **API integration tests:** run the real route handlers against a real database, covering auth flows, CRUD, filters, reordering, cross-origin blocking, and **data isolation between users**.
-- **End-to-end tests:** sign up → create a list → add, complete, edit and delete tasks → reload → log out → log back in, plus the demo flow. They run on both desktop and mobile viewports.
+- **API integration tests:** run the real route handlers against a real database, covering auth flows, CRUD, filters, reordering, cross-origin blocking, **data isolation between users**, session revocation (a replayed token after logout is rejected), password changes, account deletion, rate limiting and the cleanup cron.
+- **End-to-end tests:** sign up → create a list → add, complete, edit and delete tasks → reload → log out → log back in, plus the demo flow, signing out another device from Settings, password change and login lockout. They run on both desktop and mobile viewports.
 
 CI runs everything on each push against a throwaway Postgres container.
 

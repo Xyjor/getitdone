@@ -18,10 +18,35 @@ model User {
   email        String   @unique
   name         String
   passwordHash String
+  /// Throwaway sandbox account created by the "Try the demo" button.
+  isDemo       Boolean  @default(false)
   createdAt    DateTime @default(now())
 
-  lists List[]
-  tasks Task[]
+  lists    List[]
+  tasks    Task[]
+  sessions Session[]
+}
+
+/// One signed-in browser/device. A session JWT is only valid while its row exists,
+/// which is what makes logout, "log out everywhere" and password changes revoke access.
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Fixed-window counters for rate limiting. `key` is a SHA-256 hash (no raw IPs/emails stored).
+model RateLimit {
+  key         String   @id
+  count       Int
+  windowStart DateTime
 }
 
 model List {

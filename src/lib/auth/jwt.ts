@@ -16,10 +16,11 @@ function getSecret() {
   return new TextEncoder().encode(secret);
 }
 
-export type SessionPayload = { userId: string };
+export type SessionPayload = { userId: string; sessionId: string };
 
-export async function signSessionToken(userId: string): Promise<string> {
-  return new SignJWT({})
+/** The token names a Session row (`sid`); it's only honoured while that row exists. */
+export async function signSessionToken(userId: string, sessionId: string): Promise<string> {
+  return new SignJWT({ sid: sessionId })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(userId)
     .setIssuer(ISSUER)
@@ -40,7 +41,8 @@ export async function verifySessionToken(
       audience: AUDIENCE,
       algorithms: ["HS256"],
     });
-    return payload.sub ? { userId: payload.sub } : null;
+    const sid = typeof payload.sid === "string" ? payload.sid : null;
+    return payload.sub && sid ? { userId: payload.sub, sessionId: sid } : null;
   } catch {
     return null;
   }
