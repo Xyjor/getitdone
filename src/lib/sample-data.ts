@@ -97,7 +97,6 @@ export async function createSampleData(db: Db, userId: string) {
         position: i,
         listId: listIdAt.get(listIndex)!,
         createdById: userId,
-        legacyUserId: userId,
       })),
     ),
   });
@@ -150,7 +149,6 @@ export async function createSharedSampleData(
     title,
     listId: launch!.id,
     createdById,
-    legacyUserId: createdById,
     position: i,
     priority: extra.priority ?? "MEDIUM",
     completed: extra.completed ?? false,

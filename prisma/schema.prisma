@@ -124,9 +124,9 @@ model Task {
   createdById String?
   createdBy   User?   @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
 
-  /// DEPRECATED: the old "userId" column, kept only so the previously deployed version keeps
-  /// working during a deploy (expand/contract migration). Written alongside createdById;
-  /// never read. Dropped in a follow-up migration once this release is live.
+  /// DEPRECATED: the old "userId" column (expand/contract migration). No longer written or
+  /// read; still present so the previously deployed version keeps working during this deploy.
+  /// Dropped in the next migration.
   legacyUserId String? @map("userId")
   legacyUser   User?   @relation("TaskLegacyUser", fields: [legacyUserId], references: [id], onDelete: SetNull)
 

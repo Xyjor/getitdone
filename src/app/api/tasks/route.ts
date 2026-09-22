@@ -65,7 +65,6 @@ export const POST = route(async (req) => {
       dueDate: fromDateOnly(dueDate),
       position: (last._max.position ?? -1) + 1,
       createdById: user.id,
-      legacyUserId: user.id, // keeps the previous deployment working mid-deploy; see schema
     },
     include: taskInclude,
   });
