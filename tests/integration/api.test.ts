@@ -224,6 +224,15 @@ describe("lists and tasks", () => {
     expect((await call(listById.GET, { params: { id: listId } })).status).toBe(404);
   });
 
+  it("stores the creator only in createdById (the old userId column is no longer written)", async () => {
+    const { id: userId } = await signUp();
+    const list = await createList("Contract step");
+    const t = await createTask({ title: "New style", listId: list.id });
+    const row = await db.task.findUniqueOrThrow({ where: { id: t.body.task.id } });
+    expect(row.createdById).toBe(userId);
+    expect(row.legacyUserId).toBeNull();
+  });
+
   it("deleting a list deletes its tasks", async () => {
     await signUp();
     const list = await createList("Temp");
