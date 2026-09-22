@@ -21,7 +21,12 @@ import {
   Trash2,
   type LucideIcon,
   CalendarClock,
+  Mail,
+  LogOut as LeaveIcon,
+  Users,
 } from "lucide-react";
+import { InvitationsDialog } from "@/components/sharing/invitations-dialog";
+import { useMyInvites, useRemoveMember } from "@/hooks/use-sharing";
 import { Logo } from "@/components/logo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -56,7 +61,11 @@ type Props = { user: UserDTO; onNavigate?: () => void };
 export function Sidebar({ user, onNavigate }: Props) {
   const pathname = usePathname();
   const { data: lists, isPending } = useLists();
+  const { data: invites = [] } = useMyInvites();
   const [createOpen, setCreateOpen] = useState(false);
+  const [invitesOpen, setInvitesOpen] = useState(false);
+  const myLists = lists?.filter((l) => l.role === "OWNER");
+  const sharedWithMe = lists?.filter((l) => l.role !== "OWNER") ?? [];
 
   return (
     <div className="flex h-full flex-col">
@@ -80,10 +89,25 @@ export function Sidebar({ user, onNavigate }: Props) {
               </NavLink>
             </li>
           ))}
+          {invites.length > 0 && (
+            <li>
+              <button
+                type="button"
+                onClick={() => setInvitesOpen(true)}
+                className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2 text-sm font-medium transition-colors hover:bg-sidebar-accent"
+              >
+                <Mail className="size-4 text-muted-foreground" />
+                Invitations
+                <span className="ml-auto rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-foreground tabular-nums">
+                  {invites.length}
+                </span>
+              </button>
+            </li>
+          )}
         </ul>
 
         <div className="mt-6 mb-1 flex items-center justify-between px-2">
-          <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Lists</h2>
+          <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">My lists</h2>
           <Button
             variant="ghost"
             size="icon-xs"
@@ -101,7 +125,7 @@ export function Sidebar({ user, onNavigate }: Props) {
                 <Skeleton className="h-5 w-full" />
               </li>
             ))}
-          {lists?.map((list) => (
+          {myLists?.map((list) => (
             <ListNavItem
               key={list.id}
               list={list}
@@ -109,7 +133,7 @@ export function Sidebar({ user, onNavigate }: Props) {
               onNavigate={onNavigate}
             />
           ))}
-          {lists?.length === 0 && (
+          {myLists?.length === 0 && (
             <li className="px-2 py-1.5 text-sm text-muted-foreground">No lists yet.</li>
           )}
         </ul>
@@ -121,6 +145,25 @@ export function Sidebar({ user, onNavigate }: Props) {
         >
           <Plus /> New list
         </Button>
+
+        {sharedWithMe.length > 0 && (
+          <>
+            <h2 className="mt-6 mb-1 px-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Shared with me
+            </h2>
+            <ul className="space-y-0.5">
+              {sharedWithMe.map((list) => (
+                <ListNavItem
+                  key={list.id}
+                  list={list}
+                  userId={user.id}
+                  active={pathname === `/app/lists/${list.id}`}
+                  onNavigate={onNavigate}
+                />
+              ))}
+            </ul>
+          </>
+        )}
       </nav>
 
       <div className="border-t p-3">
@@ -128,6 +171,7 @@ export function Sidebar({ user, onNavigate }: Props) {
       </div>
 
       <ListDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <InvitationsDialog open={invitesOpen} onOpenChange={setInvitesOpen} onNavigate={onNavigate} />
     </div>
   );
 }
@@ -163,23 +207,32 @@ function NavLink({
 
 function ListNavItem({
   list,
+  userId,
   active,
   onNavigate,
 }: {
   list: ListDTO;
+  /** Needed for shared lists (to leave them). */
+  userId?: string;
   active: boolean;
   onNavigate?: () => void;
 }) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
   const deleteList = useDeleteList();
+  const leave = useRemoveMember(list.id);
+  const isOwner = list.role === "OWNER";
 
   return (
     <li className="group/list relative">
       <NavLink href={`/app/lists/${list.id}`} active={active} onNavigate={onNavigate} className="pr-9">
         <span className={cn("size-2.5 shrink-0 rounded-full", LIST_COLOR_CLASSES[list.color])} />
         <span className="truncate">{list.name}</span>
+        {isOwner && list.memberCount > 0 && (
+          <Users className="size-3.5 shrink-0 text-muted-foreground" aria-label="Shared" />
+        )}
         {list.openCount > 0 && (
           <span className="ml-auto text-xs text-muted-foreground tabular-nums group-hover/list:opacity-0 group-focus-within/list:opacity-0">
             {list.openCount}
@@ -199,16 +252,41 @@ function ListNavItem({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="right">
-          <DropdownMenuItem onSelect={() => setEditOpen(true)}>
-            <Pencil /> Edit list
-          </DropdownMenuItem>
-          <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
-            <Trash2 /> Delete list
-          </DropdownMenuItem>
+          {isOwner ? (
+            <>
+              <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+                <Pencil /> Edit list
+              </DropdownMenuItem>
+              <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
+                <Trash2 /> Delete list
+              </DropdownMenuItem>
+            </>
+          ) : (
+            <DropdownMenuItem variant="destructive" onSelect={() => setLeaveOpen(true)}>
+              <LeaveIcon /> Leave list
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <ListDialog open={editOpen} onOpenChange={setEditOpen} list={list} />
+      {!isOwner && userId && (
+        <ConfirmDialog
+          open={leaveOpen}
+          onOpenChange={setLeaveOpen}
+          title={`Leave "${list.name}"?`}
+          description={`You'll lose access until ${list.ownerName} invites you again.`}
+          confirmLabel="Leave list"
+          onConfirm={() =>
+            leave.mutate(userId, {
+              onSuccess: () => {
+                if (active) router.push("/app/today");
+              },
+            })
+          }
+        />
+      )}
+
+      {isOwner && <ListDialog open={editOpen} onOpenChange={setEditOpen} list={list} />}
       <ConfirmDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}

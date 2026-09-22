@@ -6,7 +6,7 @@ import { hashPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
-import { DEMO_EMAIL_DOMAIN, createSampleData } from "@/lib/sample-data";
+import { DEMO_EMAIL_DOMAIN, createSampleData, createSharedSampleData } from "@/lib/sample-data";
 
 /**
  * Creates a throwaway account pre-filled with sample data and signs the visitor in.
@@ -30,6 +30,10 @@ export const POST = route(async (req) => {
       select: { id: true, name: true, email: true, isDemo: true },
     });
     await createSampleData(tx, created.id);
+    await createSharedSampleData(tx, created, {
+      email: `sam-${id}@${DEMO_EMAIL_DOMAIN}`,
+      passwordHash,
+    });
     return created;
   });
 

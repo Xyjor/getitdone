@@ -128,7 +128,8 @@ export function toTaskDTO(t: TaskRow): TaskDTO {
 
 type ListRow = Prisma.ListGetPayload<object>;
 
-type ListExtras = Pick<ListDTO, "role" | "ownerName"> & Partial<Pick<ListDTO, "openCount" | "memberCount">>;
+type ListExtras = Pick<ListDTO, "role" | "ownerName"> &
+  Partial<Pick<ListDTO, "openCount" | "memberCount" | "pendingInviteCount">>;
 
 export function toListDTO(l: ListRow, extras: ListExtras): ListDTO {
   return {
@@ -140,5 +141,6 @@ export function toListDTO(l: ListRow, extras: ListExtras): ListDTO {
     role: extras.role,
     ownerName: extras.ownerName,
     memberCount: extras.memberCount ?? 0,
+    pendingInviteCount: extras.pendingInviteCount ?? 0,
   };
 }

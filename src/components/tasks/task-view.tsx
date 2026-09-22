@@ -6,11 +6,15 @@ import { format, parseISO } from "date-fns";
 import {
   CalendarCheck2,
   ChevronRight,
+  Eye,
   PartyPopper,
   SearchX,
   Sparkles,
+  UserPlus,
+  Users,
   type LucideIcon,
 } from "lucide-react";
+import { ShareDialog } from "@/components/sharing/share-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLists } from "@/hooks/use-lists";
@@ -44,35 +48,68 @@ function toFilter(mode: TaskViewMode): TaskFilter {
 export function TaskView({ mode }: { mode: TaskViewMode }) {
   const today = localToday();
   const lists = useLists();
-  const tasks = useTasks(toFilter(mode));
   const listsById = useMemo(
     () => new Map((lists.data ?? []).map((l) => [l.id, l])),
     [lists.data],
   );
-
   const list = mode.kind === "list" ? listsById.get(mode.listId) : undefined;
+  // Shared lists poll so collaborators' changes appear; so do views that include shared lists.
+  const live = mode.kind === "list" ? isShared(list) : (lists.data ?? []).some(isShared);
+  const tasks = useTasks(toFilter(mode), { live });
+  const [shareOpen, setShareOpen] = useState(false);
+
   if (mode.kind === "list" && lists.isSuccess && !list) return <ListNotFound />;
 
   const header = getHeader(mode, list, today);
-  const canAdd = mode.kind !== "completed" && mode.kind !== "search";
+  const readOnly = list?.role === "VIEWER";
+  const editableLists = (lists.data ?? []).filter((l) => l.role !== "VIEWER");
+  const canAdd = mode.kind !== "completed" && mode.kind !== "search" && !readOnly;
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 md:py-10">
-      <header className="mb-6">
-        <div className="flex items-center gap-2.5">
-          {list && <span className={cn("size-3 rounded-full", LIST_COLOR_CLASSES[list.color])} />}
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            {header.title ?? <Skeleton className="h-8 w-40" />}
-          </h1>
+      <header className="mb-6 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2.5">
+            {list && <span className={cn("size-3 shrink-0 rounded-full", LIST_COLOR_CLASSES[list.color])} />}
+            <h1 className="truncate text-2xl font-semibold tracking-tight sm:text-3xl">
+              {header.title ?? <Skeleton className="h-8 w-40" />}
+            </h1>
+          </div>
+          {header.subtitle && <p className="mt-1 text-sm text-muted-foreground">{header.subtitle}</p>}
+          {list && list.role !== "OWNER" && (
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Users className="size-3.5" /> Shared by {list.ownerName} ·{" "}
+              {list.role === "EDITOR" ? "you can edit" : "view only"}
+            </p>
+          )}
         </div>
-        {header.subtitle && <p className="mt-1 text-sm text-muted-foreground">{header.subtitle}</p>}
+        {list?.role === "OWNER" && (
+          <Button variant="outline" onClick={() => setShareOpen(true)} className="shrink-0">
+            <UserPlus /> Share
+            {list.memberCount > 0 && (
+              <span className="rounded-full bg-primary/10 px-1.5 text-xs text-primary">
+                {list.memberCount}
+              </span>
+            )}
+          </Button>
+        )}
       </header>
+
+      {list?.role === "OWNER" && (
+        <ShareDialog list={list} open={shareOpen} onOpenChange={setShareOpen} />
+      )}
+
+      {readOnly && (
+        <p className="mb-6 flex items-center gap-2 rounded-xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+          <Eye className="size-4" /> View only. Ask {list?.ownerName} for edit access to make changes.
+        </p>
+      )}
 
       {canAdd && lists.data && (
         <div className="mb-6">
           <AddTaskForm
             key={mode.kind === "list" ? mode.listId : mode.kind}
-            lists={lists.data}
+            lists={editableLists}
             listId={mode.kind === "list" ? mode.listId : undefined}
             defaultDueDate={mode.kind === "today" ? today : mode.kind === "upcoming" ? localToday(1) : null}
           />
@@ -91,10 +128,22 @@ export function TaskView({ mode }: { mode: TaskViewMode }) {
       ) : tasks.data.length === 0 ? (
         <EmptyState mode={mode} />
       ) : (
-        <TaskGroups mode={mode} tasks={tasks.data} listsById={listsById} today={today} />
+        <TaskGroups
+          mode={mode}
+          tasks={tasks.data}
+          listsById={listsById}
+          today={today}
+          readOnly={readOnly}
+          showCreator={mode.kind === "list" && isShared(list)}
+        />
       )}
     </div>
   );
+}
+
+/** A list other people can (or are about to) see: shared by me, invited to, or shared with me. */
+function isShared(l?: ListDTO) {
+  return !!l && (l.memberCount > 0 || l.pendingInviteCount > 0 || l.role !== "OWNER");
 }
 
 function getHeader(mode: TaskViewMode, list: ListDTO | undefined, today: string) {
@@ -124,11 +173,15 @@ function TaskGroups({
   tasks,
   listsById,
   today,
+  readOnly,
+  showCreator,
 }: {
   mode: TaskViewMode;
   tasks: TaskDTO[];
   listsById: Map<string, ListDTO>;
   today: string;
+  readOnly: boolean;
+  showCreator: boolean;
 }) {
   if (mode.kind === "list") {
     const open = tasks.filter((t) => !t.completed);
@@ -136,13 +189,28 @@ function TaskGroups({
     return (
       <div className="space-y-6">
         {open.length > 0 ? (
-          <SortableTaskList listId={mode.listId} tasks={open} today={today} />
+          readOnly ? (
+            <ul className="space-y-2">
+              {open.map((t) => (
+                <TaskItem key={t.id} task={t} today={today} readOnly showCreator={showCreator} />
+              ))}
+            </ul>
+          ) : (
+            <SortableTaskList
+              listId={mode.listId}
+              tasks={open}
+              today={today}
+              showCreator={showCreator}
+            />
+          )
         ) : (
           <p className="flex items-center gap-2 rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
             <PartyPopper className="size-4" /> All done in this list!
           </p>
         )}
-        {done.length > 0 && <CompletedSection tasks={done} today={today} />}
+        {done.length > 0 && (
+          <CompletedSection tasks={done} today={today} readOnly={readOnly} showCreator={showCreator} />
+        )}
       </div>
     );
   }
@@ -185,7 +253,14 @@ function TaskGroups({
           )}
           <ul className="space-y-2">
             {g.tasks.map((t) => (
-              <TaskItem key={t.id} task={t} list={listsById.get(t.listId)} showList today={today} />
+              <TaskItem
+                key={t.id}
+                task={t}
+                list={listsById.get(t.listId)}
+                showList
+                today={today}
+                readOnly={listsById.get(t.listId)?.role === "VIEWER"}
+              />
             ))}
           </ul>
         </section>
@@ -194,7 +269,17 @@ function TaskGroups({
   );
 }
 
-function CompletedSection({ tasks, today }: { tasks: TaskDTO[]; today: string }) {
+function CompletedSection({
+  tasks,
+  today,
+  readOnly,
+  showCreator,
+}: {
+  tasks: TaskDTO[];
+  today: string;
+  readOnly: boolean;
+  showCreator: boolean;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <section>
@@ -210,7 +295,7 @@ function CompletedSection({ tasks, today }: { tasks: TaskDTO[]; today: string })
       {open && (
         <ul className="space-y-2">
           {tasks.map((t) => (
-            <TaskItem key={t.id} task={t} today={today} />
+            <TaskItem key={t.id} task={t} today={today} readOnly={readOnly} showCreator={showCreator} />
           ))}
         </ul>
       )}

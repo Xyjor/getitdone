@@ -11,9 +11,15 @@ export type TaskFilter = { listId?: string; view: TaskView; q?: string };
 
 export const tasksKey = (filter: TaskFilter) => ["tasks", filter] as const;
 
-export function useTasks(filter: TaskFilter) {
+/**
+ * @param live poll every 10s: used for shared lists so collaborators' changes show up.
+ * Polling (rather than websockets) keeps hosting free; it pauses while the tab is hidden.
+ */
+export function useTasks(filter: TaskFilter, { live = false }: { live?: boolean } = {}) {
   return useQuery({
     queryKey: tasksKey(filter),
+    refetchInterval: live ? 10_000 : false,
+    refetchIntervalInBackground: false,
     queryFn: () => {
       const params = new URLSearchParams({ view: filter.view, today: localToday() });
       if (filter.listId) params.set("listId", filter.listId);

@@ -33,7 +33,9 @@ export function TaskDialog({ task, open, onOpenChange }: Props) {
 }
 
 function TaskForm({ task, onDone }: { task: TaskDTO; onDone: () => void }) {
-  const { data: lists = [] } = useLists();
+  const { data: allLists = [] } = useLists();
+  // Tasks can only be moved into lists the user can edit.
+  const lists = allLists.filter((l) => l.role !== "VIEWER");
   const update = useUpdateTask();
   const remove = useDeleteTask();
 

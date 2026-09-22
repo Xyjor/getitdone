@@ -32,7 +32,13 @@ export const listSummaryInclude = (userId: string) =>
   ({
     user: { select: { name: true } },
     members: { where: { userId }, select: { role: true } },
-    _count: { select: { members: true, tasks: { where: { completed: false } } } },
+    _count: {
+      select: {
+        members: true,
+        tasks: { where: { completed: false } },
+        invites: { where: { expiresAt: { gt: new Date() } } },
+      },
+    },
   }) satisfies Prisma.ListInclude;
 
 type ListSummaryRow = Prisma.ListGetPayload<{ include: ReturnType<typeof listSummaryInclude> }>;
@@ -44,6 +50,8 @@ export function toListSummary(row: ListSummaryRow, userId: string) {
     ownerName: row.user.name,
     openCount: row._count.tasks,
     memberCount: row._count.members,
+    // Only the owner needs to know about pending invites.
+    pendingInviteCount: role === "OWNER" ? row._count.invites : 0,
   });
 }
 

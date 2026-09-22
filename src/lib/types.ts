@@ -25,6 +25,8 @@ export type ListDTO = {
   ownerName: string;
   /** People the list is shared with (not counting the owner). */
   memberCount: number;
+  /** Invitations the owner has sent that haven't been accepted yet (0 for non-owners). */
+  pendingInviteCount: number;
 };
 
 export type ListRoleValue = "OWNER" | MemberRoleValue;

@@ -385,6 +385,16 @@ describe("shared lists in the app's views", () => {
     expect(mine.find((l) => l.id !== list.id)!.role).toBe("OWNER"); // their own "My Tasks"
   });
 
+  it("tells the owner about pending invites so their page can start refreshing", async () => {
+    const owner = await newUser("Oakley");
+    const list = await createList(owner, "Pending");
+    await invite(owner, list.id, uniqueEmail("later"), "EDITOR");
+
+    as(owner);
+    const mine = (await call<{ lists: (List & { pendingInviteCount: number })[] }>(lists.GET)).body.lists;
+    expect(mine.find((l) => l.id === list.id)).toMatchObject({ memberCount: 0, pendingInviteCount: 1 });
+  });
+
   it("includes shared tasks in Today and search, with who added them", async () => {
     const owner = await newUser("Oriel");
     const member = await newUser("Mira");
@@ -417,5 +427,31 @@ describe("shared lists in the app's views", () => {
       body: { listId: list.id },
     });
     expect(move.status).toBe(403);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+
+describe("demo showcase", () => {
+  it("gives every demo visitor a list shared with them and a pending invitation", async () => {
+    const demo = await import("@/app/api/auth/demo/route");
+    jar.clear();
+    const res = await call<{ user: { id: string } }>(demo.POST, { method: "POST" });
+    expect(res.status).toBe(201);
+
+    const mine = (await call<{ lists: List[] }>(lists.GET)).body.lists;
+    const shared = mine.find((l) => l.role !== "OWNER");
+    expect(shared).toMatchObject({ role: "EDITOR", ownerName: "Sam (demo)" });
+
+    const sharedTasks = (await call<{ tasks: Task[] }>(tasks.GET, { search: { listId: shared!.id } })).body.tasks;
+    expect(new Set(sharedTasks.map((t) => t.createdByName))).toEqual(new Set(["Sam (demo)", "Demo User"]));
+
+    const invites = (await call<{ invites: Invite[] }>(myInvites.GET)).body.invites;
+    expect(invites).toHaveLength(1);
+    expect(invites[0]!.invitedByName).toBe("Sam (demo)");
+
+    // Clean up the visitor and their companion (both are demo accounts).
+    const companionIds = (await db.list.findMany({ where: { id: shared!.id }, select: { userId: true } })).map((l) => l.userId);
+    await db.user.deleteMany({ where: { id: { in: [res.body.user.id, ...companionIds] } } });
   });
 });

@@ -12,6 +12,8 @@ export function useLists() {
   return useQuery({
     queryKey: listsKey,
     queryFn: () => api<{ lists: ListDTO[] }>("/api/lists").then((r) => r.lists),
+    // Picks up lists shared with you, role changes and removals made by other people.
+    refetchInterval: 30_000,
   });
 }
 
