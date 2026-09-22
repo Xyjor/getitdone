@@ -59,7 +59,8 @@ flowchart LR
 - **Authorization:** every query filters by the signed-in user's id. Requesting another user's list or task returns `404`, so the API doesn't even reveal that it exists. This is covered by a dedicated integration test.
 - **No user enumeration:** login returns the same error, in about the same time, for unknown emails and wrong passwords.
 - **Revocable sessions:** each JWT names a `Session` row and is only honoured while that row exists. Logging out deletes the row, so a copied token stops working immediately. Changing the password revokes every other session.
-- **Rate limiting:** a single atomic Postgres upsert per check (fixed window). Login is limited per IP and per account (5 failures per 15 minutes, reset on success), and sign-up and demo are limited per IP. Responses are `429` with `Retry-After`. Keys are SHA-256 hashed, so no raw IPs or emails are stored.
+- **Rate limiting:** a single atomic Postgres upsert per check (fixed window), so parallel requests can't race past a limit. Login is limited per IP and per account (5 attempts per 15 minutes, counted before the password check and reset on success). Sign-up and demo are limited per IP, and IPv6 clients are grouped by /64. Responses are `429` with `Retry-After`. Keys are HMAC-SHA256 hashed with a server secret, so no raw IPs or emails are stored.
+  - *Trade-off:* anyone can temporarily lock a known email by failing its login 5 times. That's accepted here in exchange for stopping password guessing, and the lock lifts after 15 minutes.
 - **Defense in depth:** the proxy only checks that the JWT is valid. The app layout and every API route still load the user from the database.
 - **Validated input:** all input goes through Zod on the server, with the same schemas reused on the client for instant form feedback.
 - **Safe redirects:** the `?next=` redirect after login only allows same-site paths.

@@ -232,7 +232,7 @@ function SessionsCard() {
           <Button
             variant="outline"
             disabled={others.length === 0 || revokeOthers.isPending}
-            onClick={() => revokeOthers.mutate(others.map((s) => s.id))}
+            onClick={() => revokeOthers.mutate()}
           >
             Sign out all other devices
           </Button>

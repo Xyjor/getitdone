@@ -71,7 +71,8 @@ export const getCurrentUser = cache(async () => {
   if (!session) return null;
 
   if (Date.now() - session.lastSeenAt.getTime() > LAST_SEEN_THROTTLE_MS) {
-    await db.session.update({ where: { id: session.id }, data: { lastSeenAt: new Date() } });
+    // updateMany: if the session is revoked at this exact moment, don't throw.
+    await db.session.updateMany({ where: { id: session.id }, data: { lastSeenAt: new Date() } });
   }
 
   return { ...session.user, sessionId: session.id };

@@ -8,6 +8,11 @@ describe("clientIp", () => {
     expect(clientIp(new Headers({ "x-forwarded-for": "203.0.113.7, 10.0.0.1" }))).toBe("203.0.113.7");
   });
 
+  it("groups IPv6 addresses by their /64 prefix (one household or server)", () => {
+    expect(clientIp(new Headers({ "x-forwarded-for": "2001:db8:abcd:12:1:2:3:4" }))).toBe("2001:db8:abcd:12::/64");
+    expect(clientIp(new Headers({ "x-forwarded-for": "2001:db8:abcd:12::99" }))).toBe("2001:db8:abcd:12::/64");
+  });
+
   it("falls back to x-real-ip, then to 'local'", () => {
     expect(clientIp(new Headers({ "x-real-ip": "198.51.100.2" }))).toBe("198.51.100.2");
     expect(clientIp(new Headers())).toBe("local");

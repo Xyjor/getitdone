@@ -52,13 +52,11 @@ export function useRevokeSession() {
   });
 }
 
-/** Signs out every *other* device by revoking each non-current session. */
+/** Signs out every *other* device (one server-side query). */
 export function useRevokeOtherSessions() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (ids: string[]) => {
-      await Promise.all(ids.map((id) => api(`/api/account/sessions/${id}`, { method: "DELETE" })));
-    },
+    mutationFn: () => api<{ revoked: number }>("/api/account/sessions", { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: sessionsKey });
       toast.success("Signed out of all other devices");

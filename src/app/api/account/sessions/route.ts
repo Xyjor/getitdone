@@ -24,3 +24,15 @@ export const GET = route(async () => {
 
   return NextResponse.json({ sessions });
 });
+
+/**
+ * DELETE /api/account/sessions: signs out every *other* device in one query, including
+ * sessions created after the settings page loaded.
+ */
+export const DELETE = route(async () => {
+  const user = await requireUser();
+  const { count } = await db.session.deleteMany({
+    where: { userId: user.id, id: { not: user.sessionId } },
+  });
+  return NextResponse.json({ revoked: count });
+});

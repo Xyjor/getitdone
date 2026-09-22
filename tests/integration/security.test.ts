@@ -17,6 +17,7 @@ const register = await import("@/app/api/auth/register/route");
 const login = await import("@/app/api/auth/login/route");
 const logout = await import("@/app/api/auth/logout/route");
 const logoutAll = await import("@/app/api/auth/logout-all/route");
+const { hashKey } = await import("@/lib/rate-limit");
 const me = await import("@/app/api/auth/me/route");
 const demo = await import("@/app/api/auth/demo/route");
 const account = await import("@/app/api/account/route");
@@ -105,6 +106,23 @@ describe("revocable sessions", () => {
     expect(await isLoggedIn()).toBe(false);
     useSession(laptop);
     expect(await isLoggedIn()).toBe(true);
+  });
+
+  it("signs out every other device in one step, including sessions the page never saw", async () => {
+    const { email, session: laptop } = await signUp();
+    const phone = await loginAgain(email);
+    const tablet = await loginAgain(email); // created after the laptop loaded its list
+
+    useSession(laptop);
+    const res = await call<{ revoked: number }>(sessions.DELETE, { method: "DELETE" });
+    expect(res.status).toBe(200);
+    expect(res.body.revoked).toBe(2);
+
+    expect(await isLoggedIn()).toBe(true);
+    useSession(phone);
+    expect(await isLoggedIn()).toBe(false);
+    useSession(tablet);
+    expect(await isLoggedIn()).toBe(false);
   });
 
   it("cannot revoke another user's session", async () => {
@@ -211,6 +229,52 @@ describe("rate limiting", () => {
     const locked = await call<ErrorBody>(login.POST, { method: "POST", body: { email, password: PASSWORD } });
     expect(locked.status).toBe(429);
     expect(Number(locked.headers.get("retry-after"))).toBeGreaterThan(0);
+  });
+
+  it("parallel guesses cannot get past the per-account limit", async () => {
+    const { email } = await signUp();
+    jar.clear();
+
+    const results = await Promise.all(
+      Array.from({ length: 10 }, (_, i) =>
+        call(login.POST, { method: "POST", body: { email, password: `parallel-guess-${i}` } }),
+      ),
+    );
+    const statuses = results.map((r) => r.status);
+    expect(statuses.filter((s) => s === 401).length).toBeLessThanOrEqual(5);
+    expect(statuses.filter((s) => s === 429).length).toBeGreaterThanOrEqual(5);
+    expect(results.find((r) => r.status === 429)!.headers.get("retry-after")).toBeTruthy();
+  });
+
+  it("the limit resets once the window has passed", async () => {
+    const ip = randomIp();
+    for (let i = 0; i < 5; i++) await signUp("window", ip);
+    const blocked = await call(register.POST, {
+      method: "POST",
+      ip,
+      body: { name: "Blocked", email: uniqueEmail("window"), password: PASSWORD },
+    });
+    expect(blocked.status).toBe(429);
+
+    // Pretend the hour-long window started 61 minutes ago.
+    await db.rateLimit.update({
+      where: { key: hashKey(`register:ip:${ip}`) },
+      data: { windowStart: new Date(Date.now() - 61 * 60 * 1000) },
+    });
+
+    await signUp("window", ip);
+    const row = await db.rateLimit.findUniqueOrThrow({ where: { key: hashKey(`register:ip:${ip}`) } });
+    expect(row.count).toBe(1);
+  });
+
+  it("treats addresses in the same IPv6 /64 as one client", async () => {
+    for (let i = 1; i <= 5; i++) await signUp("v6", `2001:db8:abcd:12::${i}`);
+    const res = await call(register.POST, {
+      method: "POST",
+      ip: "2001:db8:abcd:12::99",
+      body: { name: "Rotating", email: uniqueEmail("v6"), password: PASSWORD },
+    });
+    expect(res.status).toBe(429);
   });
 
   it("a successful login clears the failure count", async () => {
