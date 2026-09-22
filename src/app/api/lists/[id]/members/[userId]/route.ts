@@ -13,7 +13,10 @@ export const PATCH = route<Ctx>(async (req, { params }) => {
   const { role } = await parseBody(req, memberRoleSchema);
   await requireListRole(user.id, id, "OWNER");
 
-  const { count } = await db.listMember.updateMany({ where: { listId: id, userId }, data: { role } });
+  const { count } = await db.listMember.updateMany({
+    where: { listId: id, userId },
+    data: { role },
+  });
   if (count === 0) throw notFound("Member");
   return NextResponse.json({ member: { userId, role } });
 });

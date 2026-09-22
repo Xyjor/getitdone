@@ -19,7 +19,9 @@ async function openMenuIfMobile(page: Page) {
   if (await menu.isVisible()) await menu.click();
 }
 
-test("share a list: invite, accept, collaborate, then downgrade to view-only", async ({ browser }) => {
+test("share a list: invite, accept, collaborate, then downgrade to view-only", async ({
+  browser,
+}) => {
   test.slow(); // two users, several round trips
 
   const bobEmail = uniqueEmail("bob");
@@ -54,7 +56,9 @@ test("share a list: invite, accept, collaborate, then downgrade to view-only", a
   await input.press("Enter");
   await expect(bob.getByRole("button", { name: /^Pack the kitchen/ })).toBeVisible();
 
-  await expect(alice.getByRole("button", { name: /^Pack the kitchen/ })).toBeVisible({ timeout: 20_000 });
+  await expect(alice.getByRole("button", { name: /^Pack the kitchen/ })).toBeVisible({
+    timeout: 20_000,
+  });
   await expect(alice.getByText("Bob Builder")).toBeVisible(); // "added by"
 
   // Alice makes Bob a viewer; Bob's editing controls disappear.
@@ -68,4 +72,10 @@ test("share a list: invite, accept, collaborate, then downgrade to view-only", a
   await expect(bob.getByText(/View only/).first()).toBeVisible();
   await expect(bob.getByLabel("New task title")).toHaveCount(0);
   await expect(bob.getByRole("checkbox", { name: /Pack the kitchen/ })).toBeDisabled();
+
+  // A viewer can still open a task to read it, but not change it.
+  await bob.getByRole("button", { name: /^Pack the kitchen/ }).click();
+  const details = bob.getByRole("dialog", { name: "Pack the kitchen" });
+  await expect(details.getByText("View only")).toBeVisible();
+  await expect(details.getByRole("button", { name: "Save" })).toHaveCount(0);
 });

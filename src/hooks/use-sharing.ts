@@ -6,20 +6,23 @@ import { api } from "@/lib/api-client";
 import type { InviteDTO, ListInviteDTO, MemberDTO } from "@/lib/types";
 import type { InviteInput, MemberRoleValue } from "@/lib/validations";
 import { listsKey } from "./use-lists";
+import { useUserActive } from "./use-user-active";
 
 export const membersKey = (listId: string) => ["members", listId] as const;
 export const invitesKey = ["invites"] as const;
 
 /** Invites addressed to me. Polled so new invitations appear without a reload. */
 export function useMyInvites() {
+  const active = useUserActive();
   return useQuery({
     queryKey: invitesKey,
     queryFn: () => api<{ invites: InviteDTO[] }>("/api/invites").then((r) => r.invites),
-    refetchInterval: 30_000,
+    refetchInterval: active ? 30_000 : false,
   });
 }
 
 export function useMembers(listId: string, enabled = true) {
+  const active = useUserActive();
   return useQuery({
     queryKey: membersKey(listId),
     queryFn: () =>
@@ -28,7 +31,7 @@ export function useMembers(listId: string, enabled = true) {
     // Always fresh when the Share dialog opens, and kept fresh while it's open, so accepted
     // invites turn into members without reopening it.
     staleTime: 0,
-    refetchInterval: 10_000,
+    refetchInterval: active ? 10_000 : false,
   });
 }
 

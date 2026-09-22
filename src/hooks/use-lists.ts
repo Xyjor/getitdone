@@ -3,17 +3,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
+import { useUserActive } from "./use-user-active";
 import type { ListDTO } from "@/lib/types";
 import type { ListCreateInput, ListUpdateInput } from "@/lib/validations";
 
 export const listsKey = ["lists"] as const;
 
 export function useLists() {
+  const active = useUserActive();
   return useQuery({
     queryKey: listsKey,
     queryFn: () => api<{ lists: ListDTO[] }>("/api/lists").then((r) => r.lists),
     // Picks up lists shared with you, role changes and removals made by other people.
-    refetchInterval: 30_000,
+    // Paused while the user is idle (and while the tab is hidden, TanStack's default).
+    refetchInterval: active ? 30_000 : false,
   });
 }
 

@@ -9,7 +9,10 @@ type Ctx = { params: Promise<{ id: string }> };
 // Access rules live in src/lib/access.ts: no access -> 404, too low a role -> 403.
 
 async function summary(listId: string, userId: string) {
-  const row = await db.list.findUniqueOrThrow({ where: { id: listId }, include: listSummaryInclude(userId) });
+  const row = await db.list.findUniqueOrThrow({
+    where: { id: listId },
+    include: listSummaryInclude(userId),
+  });
   return toListSummary(row, userId);
 }
 

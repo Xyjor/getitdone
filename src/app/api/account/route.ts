@@ -31,7 +31,11 @@ export const DELETE = route(async (req) => {
     }
   }
 
-  await db.user.delete({ where: { id: user.id } });
+  // Owned lists first (their tasks, members and invites cascade), then the account.
+  await db.$transaction([
+    db.list.deleteMany({ where: { userId: user.id } }),
+    db.user.delete({ where: { id: user.id } }),
+  ]);
   await clearSessionCookie();
   return new Response(null, { status: 204 });
 });

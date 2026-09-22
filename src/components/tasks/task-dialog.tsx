@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { format, parseISO } from "date-fns";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,18 +18,65 @@ import { Textarea } from "@/components/ui/textarea";
 import { useLists } from "@/hooks/use-lists";
 import { useDeleteTask, useUpdateTask } from "@/hooks/use-tasks";
 import type { TaskDTO } from "@/lib/types";
+import { PRIORITY_META } from "@/lib/ui";
 import { taskUpdateSchema, type PriorityValue } from "@/lib/validations";
 import { DueDatePicker, ListSelect, PrioritySelect } from "./pickers";
 
-type Props = { task: TaskDTO; open: boolean; onOpenChange: (open: boolean) => void };
+type Props = {
+  task: TaskDTO;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Viewers can read the details but not change them. */
+  readOnly?: boolean;
+};
 
-export function TaskDialog({ task, open, onOpenChange }: Props) {
+export function TaskDialog({ task, open, onOpenChange, readOnly }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
-        {open && <TaskForm task={task} onDone={() => onOpenChange(false)} />}
+        {open &&
+          (readOnly ? (
+            <TaskDetails task={task} />
+          ) : (
+            <TaskForm task={task} onDone={() => onOpenChange(false)} />
+          ))}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function TaskDetails({ task }: { task: TaskDTO }) {
+  const { data: lists = [] } = useLists();
+  const list = lists.find((l) => l.id === task.listId);
+  const rows: [string, string][] = [
+    ["Due date", task.dueDate ? format(parseISO(task.dueDate), "EEEE, MMMM d") : "No due date"],
+    ["Priority", PRIORITY_META[task.priority].label],
+    ["List", list?.name ?? ""],
+    ["Added by", task.createdByName ?? "A former member"],
+    ["Status", task.completed ? "Completed" : "Open"],
+  ];
+  return (
+    <div>
+      <DialogHeader>
+        <DialogTitle className="pr-6 break-words">{task.title}</DialogTitle>
+        <DialogDescription>View only</DialogDescription>
+      </DialogHeader>
+      <div className="py-5">
+        {task.notes ? (
+          <p className="text-sm whitespace-pre-wrap">{task.notes}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground">No notes.</p>
+        )}
+      </div>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 border-t pt-4 text-sm">
+        {rows.map(([k, v]) => (
+          <div key={k} className="contents">
+            <dt className="text-muted-foreground">{k}</dt>
+            <dd>{v}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   );
 }
 

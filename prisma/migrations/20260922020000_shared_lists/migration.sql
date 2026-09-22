@@ -4,14 +4,14 @@ CREATE TYPE "MemberRole" AS ENUM ('EDITOR', 'VIEWER');
 -- DropForeignKey
 ALTER TABLE "Task" DROP CONSTRAINT "Task_userId_fkey";
 
--- DropIndex
-DROP INDEX "Task_userId_idx";
+-- AlterTable: expand/contract. "createdById" is added next to the old "userId" (now optional)
+-- instead of renaming it, so the previously deployed version keeps working while this one
+-- builds, and a rollback stays possible. "userId" is dropped in a later migration.
+ALTER TABLE "Task" ADD COLUMN     "createdById" TEXT,
+ALTER COLUMN "userId" DROP NOT NULL;
 
--- AlterTable (hand-written): RENAME instead of drop + add, so no task loses its creator.
--- The column becomes nullable because a creator's account can be deleted while their tasks
--- live on in a list someone else owns.
-ALTER TABLE "Task" RENAME COLUMN "userId" TO "createdById";
-ALTER TABLE "Task" ALTER COLUMN "createdById" DROP NOT NULL;
+-- Backfill (hand-written): every existing task keeps its creator.
+UPDATE "Task" SET "createdById" = "userId";
 
 -- CreateTable
 CREATE TABLE "ListMember" (
@@ -66,4 +66,7 @@ ALTER TABLE "ListInvite" ADD CONSTRAINT "ListInvite_invitedById_fkey" FOREIGN KE
 
 -- AddForeignKey
 ALTER TABLE "Task" ADD CONSTRAINT "Task_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Task" ADD CONSTRAINT "Task_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 

@@ -66,7 +66,12 @@ export function route<C>(handler: Handler<C>): Handler<C> {
           fieldErrors as Record<string, string[]>,
         );
       }
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025") {
+      // P2025: record not found. P2003: a related record vanished mid-request (e.g. a list
+      // deleted while someone was accepting an invite to it).
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        ["P2025", "P2003"].includes(err.code)
+      ) {
         return errorResponse(404, "Resource not found");
       }
       console.error(err);
@@ -83,7 +88,10 @@ export async function requireUser() {
 }
 
 /** Parses and validates a JSON body. */
-export async function parseBody<S extends z.ZodType>(req: Request, schema: S): Promise<z.output<S>> {
+export async function parseBody<S extends z.ZodType>(
+  req: Request,
+  schema: S,
+): Promise<z.output<S>> {
   let json: unknown;
   try {
     json = await req.json();

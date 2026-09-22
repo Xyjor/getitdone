@@ -48,10 +48,7 @@ function toFilter(mode: TaskViewMode): TaskFilter {
 export function TaskView({ mode }: { mode: TaskViewMode }) {
   const today = localToday();
   const lists = useLists();
-  const listsById = useMemo(
-    () => new Map((lists.data ?? []).map((l) => [l.id, l])),
-    [lists.data],
-  );
+  const listsById = useMemo(() => new Map((lists.data ?? []).map((l) => [l.id, l])), [lists.data]);
   const list = mode.kind === "list" ? listsById.get(mode.listId) : undefined;
   // Shared lists poll so collaborators' changes appear; so do views that include shared lists.
   const live = mode.kind === "list" ? isShared(list) : (lists.data ?? []).some(isShared);
@@ -70,12 +67,18 @@ export function TaskView({ mode }: { mode: TaskViewMode }) {
       <header className="mb-6 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2.5">
-            {list && <span className={cn("size-3 shrink-0 rounded-full", LIST_COLOR_CLASSES[list.color])} />}
+            {list && (
+              <span
+                className={cn("size-3 shrink-0 rounded-full", LIST_COLOR_CLASSES[list.color])}
+              />
+            )}
             <h1 className="truncate text-2xl font-semibold tracking-tight sm:text-3xl">
               {header.title ?? <Skeleton className="h-8 w-40" />}
             </h1>
           </div>
-          {header.subtitle && <p className="mt-1 text-sm text-muted-foreground">{header.subtitle}</p>}
+          {header.subtitle && (
+            <p className="mt-1 text-sm text-muted-foreground">{header.subtitle}</p>
+          )}
           {list && list.role !== "OWNER" && (
             <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
               <Users className="size-3.5" /> Shared by {list.ownerName} ·{" "}
@@ -101,7 +104,8 @@ export function TaskView({ mode }: { mode: TaskViewMode }) {
 
       {readOnly && (
         <p className="mb-6 flex items-center gap-2 rounded-xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          <Eye className="size-4" /> View only. Ask {list?.ownerName} for edit access to make changes.
+          <Eye className="size-4" /> View only. Ask {list?.ownerName} for edit access to make
+          changes.
         </p>
       )}
 
@@ -111,7 +115,9 @@ export function TaskView({ mode }: { mode: TaskViewMode }) {
             key={mode.kind === "list" ? mode.listId : mode.kind}
             lists={editableLists}
             listId={mode.kind === "list" ? mode.listId : undefined}
-            defaultDueDate={mode.kind === "today" ? today : mode.kind === "upcoming" ? localToday(1) : null}
+            defaultDueDate={
+              mode.kind === "today" ? today : mode.kind === "upcoming" ? localToday(1) : null
+            }
           />
         </div>
       )}
@@ -151,7 +157,9 @@ function getHeader(mode: TaskViewMode, list: ListDTO | undefined, today: string)
     case "list":
       return {
         title: list?.name,
-        subtitle: list ? `${list.openCount} open ${list.openCount === 1 ? "task" : "tasks"}` : undefined,
+        subtitle: list
+          ? `${list.openCount} open ${list.openCount === 1 ? "task" : "tasks"}`
+          : undefined,
       };
     case "today":
       return { title: "Today", subtitle: format(parseISO(today), "EEEE, MMMM d") };
@@ -209,7 +217,12 @@ function TaskGroups({
           </p>
         )}
         {done.length > 0 && (
-          <CompletedSection tasks={done} today={today} readOnly={readOnly} showCreator={showCreator} />
+          <CompletedSection
+            tasks={done}
+            today={today}
+            readOnly={readOnly}
+            showCreator={showCreator}
+          />
         )}
       </div>
     );
@@ -219,8 +232,10 @@ function TaskGroups({
   if (mode.kind === "today") {
     const overdue = tasks.filter((t) => t.dueDate! < today);
     const dueToday = tasks.filter((t) => t.dueDate! >= today);
-    if (overdue.length) groups.push({ key: "overdue", label: "Overdue", tone: "danger", tasks: overdue });
-    if (dueToday.length) groups.push({ key: "today", label: overdue.length ? "Today" : undefined, tasks: dueToday });
+    if (overdue.length)
+      groups.push({ key: "overdue", label: "Overdue", tone: "danger", tasks: overdue });
+    if (dueToday.length)
+      groups.push({ key: "today", label: overdue.length ? "Today" : undefined, tasks: dueToday });
   } else if (mode.kind === "upcoming") {
     const byDate = new Map<string, TaskDTO[]>();
     for (const t of tasks) byDate.set(t.dueDate!, [...(byDate.get(t.dueDate!) ?? []), t]);
@@ -260,6 +275,7 @@ function TaskGroups({
                 showList
                 today={today}
                 readOnly={listsById.get(t.listId)?.role === "VIEWER"}
+                showCreator={isShared(listsById.get(t.listId))}
               />
             ))}
           </ul>
@@ -295,7 +311,13 @@ function CompletedSection({
       {open && (
         <ul className="space-y-2">
           {tasks.map((t) => (
-            <TaskItem key={t.id} task={t} today={today} readOnly={readOnly} showCreator={showCreator} />
+            <TaskItem
+              key={t.id}
+              task={t}
+              today={today}
+              readOnly={readOnly}
+              showCreator={showCreator}
+            />
           ))}
         </ul>
       )}
@@ -320,9 +342,21 @@ function TaskSkeleton() {
 
 const EMPTY: Record<TaskViewMode["kind"], { icon: LucideIcon; title: string; text: string }> = {
   list: { icon: Sparkles, title: "This list is empty", text: "Add your first task above." },
-  today: { icon: CalendarCheck2, title: "Nothing due today", text: "Enjoy the free time, or plan something above." },
-  upcoming: { icon: CalendarCheck2, title: "Nothing scheduled", text: "Tasks with a future due date show up here." },
-  completed: { icon: PartyPopper, title: "No completed tasks yet", text: "Check off a task and it will appear here." },
+  today: {
+    icon: CalendarCheck2,
+    title: "Nothing due today",
+    text: "Enjoy the free time, or plan something above.",
+  },
+  upcoming: {
+    icon: CalendarCheck2,
+    title: "Nothing scheduled",
+    text: "Tasks with a future due date show up here.",
+  },
+  completed: {
+    icon: PartyPopper,
+    title: "No completed tasks yet",
+    text: "Check off a task and it will appear here.",
+  },
   search: { icon: SearchX, title: "No matching tasks", text: "Try a different search term." },
 };
 

@@ -1,5 +1,13 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { call, headersMock, jar, TEST_EMAIL_DOMAIN, uniqueEmail, switchToSession } from "./helpers";
+import {
+  call,
+  headersMock,
+  jar,
+  TEST_EMAIL_DOMAIN,
+  uniqueEmail,
+  switchToSession,
+  deleteUsers,
+} from "./helpers";
 
 vi.mock("next/headers", () => headersMock);
 
@@ -18,7 +26,13 @@ const reorder = await import("@/app/api/tasks/reorder/route");
 const { DEMO_EMAIL_DOMAIN } = await import("@/lib/sample-data");
 
 type List = { id: string; name: string; color: string; openCount: number };
-type Task = { id: string; title: string; dueDate: string | null; completed: boolean; listId: string };
+type Task = {
+  id: string;
+  title: string;
+  dueDate: string | null;
+  completed: boolean;
+  listId: string;
+};
 type ListBody = { list: List };
 type TaskBody = { task: Task };
 type TasksBody = { tasks: Task[] };
@@ -44,8 +58,8 @@ const createTask = async (body: Record<string, unknown>) =>
   call<TaskBody>(tasks.POST, { method: "POST", body });
 
 afterAll(async () => {
-  await db.user.deleteMany({
-    where: { OR: [{ email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } }, { id: { in: demoUserIds } }] },
+  await deleteUsers(db, {
+    OR: [{ email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } }, { id: { in: demoUserIds } }],
   });
   await db.$disconnect();
 });
@@ -178,9 +192,18 @@ describe("lists and tasks", () => {
     });
     expect(renamed.body.list).toMatchObject({ name: "Deep work", color: "blue" });
 
-    const task = await createTask({ title: "Write tests", listId, dueDate: "2026-09-21", priority: "HIGH" });
+    const task = await createTask({
+      title: "Write tests",
+      listId,
+      dueDate: "2026-09-21",
+      priority: "HIGH",
+    });
     expect(task.status).toBe(201);
-    expect(task.body.task).toMatchObject({ title: "Write tests", dueDate: "2026-09-21", completed: false });
+    expect(task.body.task).toMatchObject({
+      title: "Write tests",
+      dueDate: "2026-09-21",
+      completed: false,
+    });
     const taskId = task.body.task.id;
 
     const done = await call<TaskBody>(taskById.PATCH, {
@@ -190,10 +213,14 @@ describe("lists and tasks", () => {
     });
     expect(done.body.task).toMatchObject({ completed: true, dueDate: null });
 
-    expect((await call(taskById.DELETE, { method: "DELETE", params: { id: taskId } })).status).toBe(204);
+    expect((await call(taskById.DELETE, { method: "DELETE", params: { id: taskId } })).status).toBe(
+      204,
+    );
     expect((await call(taskById.GET, { params: { id: taskId } })).status).toBe(404);
 
-    expect((await call(listById.DELETE, { method: "DELETE", params: { id: listId } })).status).toBe(204);
+    expect((await call(listById.DELETE, { method: "DELETE", params: { id: listId } })).status).toBe(
+      204,
+    );
     expect((await call(listById.GET, { params: { id: listId } })).status).toBe(404);
   });
 
@@ -222,9 +249,9 @@ describe("lists and tasks", () => {
     });
 
     const titles = async (search: Record<string, string>) =>
-      (await call<TasksBody>(tasks.GET, { search: { ...search, today: "2026-09-21" } })).body.tasks.map(
-        (t) => t.title,
-      );
+      (
+        await call<TasksBody>(tasks.GET, { search: { ...search, today: "2026-09-21" } })
+      ).body.tasks.map((t) => t.title);
 
     expect(await titles({ view: "today" })).toEqual(["Overdue thing", "Due today"]);
     expect(await titles({ view: "upcoming" })).toEqual(["Next week"]);
@@ -256,7 +283,9 @@ describe("lists and tasks", () => {
       body: { listId: a, orderedIds: [ids[2], ids[0], ids[1]] },
     });
     expect(res.status).toBe(204);
-    const order = (await call<TasksBody>(tasks.GET, { search: { listId: a } })).body.tasks.map((t) => t.title);
+    const order = (await call<TasksBody>(tasks.GET, { search: { listId: a } })).body.tasks.map(
+      (t) => t.title,
+    );
     expect(order).toEqual(["three", "one", "two"]);
 
     const moved = await call<TaskBody>(taskById.PATCH, {
@@ -266,7 +295,10 @@ describe("lists and tasks", () => {
     });
     expect(moved.body.task.listId).toBe(b);
 
-    const dup = await call(reorder.POST, { method: "POST", body: { listId: a, orderedIds: [ids[1], ids[1]] } });
+    const dup = await call(reorder.POST, {
+      method: "POST",
+      body: { listId: a, orderedIds: [ids[1], ids[1]] },
+    });
     expect(dup.status).toBe(400);
   });
 });
@@ -283,7 +315,9 @@ describe("data isolation between users", () => {
     // Reads
     expect((await call(listById.GET, params(aliceList.id))).status).toBe(404);
     expect((await call(taskById.GET, params(aliceTask.id))).status).toBe(404);
-    expect((await call<TasksBody>(tasks.GET, { search: { listId: aliceList.id } })).body.tasks).toEqual([]);
+    expect(
+      (await call<TasksBody>(tasks.GET, { search: { listId: aliceList.id } })).body.tasks,
+    ).toEqual([]);
     expect((await call<TasksBody>(tasks.GET, { search: { q: "Secret" } })).body.tasks).toEqual([]);
 
     // Writes
@@ -293,14 +327,21 @@ describe("data isolation between users", () => {
       call(taskById.PATCH, { method: "PATCH", ...params(aliceTask.id), body: { completed: true } }),
       call(taskById.DELETE, { method: "DELETE", ...params(aliceTask.id) }),
       createTask({ title: "Injected", listId: aliceList.id }),
-      call(reorder.POST, { method: "POST", body: { listId: aliceList.id, orderedIds: [aliceTask.id] } }),
+      call(reorder.POST, {
+        method: "POST",
+        body: { listId: aliceList.id, orderedIds: [aliceTask.id] },
+      }),
     ];
     for (const res of await Promise.all(attempts)) expect(res.status).toBe(404);
 
     // Moving your own task into someone else's list is blocked too.
     const myList = (await call<{ lists: List[] }>(lists.GET)).body.lists[0]!;
     const mine = (await createTask({ title: "Mine", listId: myList.id })).body.task;
-    const move = await call(taskById.PATCH, { method: "PATCH", ...params(mine.id), body: { listId: aliceList.id } });
+    const move = await call(taskById.PATCH, {
+      method: "PATCH",
+      ...params(mine.id),
+      body: { listId: aliceList.id },
+    });
     expect(move.status).toBe(404);
 
     // Alice's data is untouched.

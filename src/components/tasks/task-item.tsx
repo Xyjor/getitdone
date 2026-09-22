@@ -1,7 +1,16 @@
 "use client";
 
 import { forwardRef, useState } from "react";
-import { CalendarIcon, Flag, GripVertical, MoreHorizontal, Pencil, StickyNote, Trash2, UserRound } from "lucide-react";
+import {
+  CalendarIcon,
+  Flag,
+  GripVertical,
+  MoreHorizontal,
+  Pencil,
+  StickyNote,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -73,14 +82,16 @@ export const TaskItem = forwardRef<HTMLLIElement, Props>(function TaskItem(
         checked={task.completed}
         disabled={saving || readOnly}
         onCheckedChange={(checked) => update.mutate({ id: task.id, completed: checked === true })}
-        aria-label={task.completed ? `Mark "${task.title}" as not done` : `Mark "${task.title}" as done`}
+        aria-label={
+          task.completed ? `Mark "${task.title}" as not done` : `Mark "${task.title}" as done`
+        }
         className="mt-0.5 size-5 rounded-full"
       />
 
       <button
         type="button"
         onClick={() => setEditOpen(true)}
-        disabled={saving || readOnly}
+        disabled={saving}
         className="min-w-0 flex-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <span
@@ -92,16 +103,30 @@ export const TaskItem = forwardRef<HTMLLIElement, Props>(function TaskItem(
           {task.title}
         </span>
 
-        {(due || task.priority !== "MEDIUM" || task.notes || (showList && list) || (showCreator && task.createdByName)) && (
+        {(due ||
+          task.priority !== "MEDIUM" ||
+          task.notes ||
+          (showList && list) ||
+          (showCreator && task.createdByName)) && (
           <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             {due && (
-              <span className={cn("inline-flex items-center gap-1", !task.completed && DUE_TONE_CLASSES[due.tone])}>
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1",
+                  !task.completed && DUE_TONE_CLASSES[due.tone],
+                )}
+              >
                 <CalendarIcon className="size-3" />
                 {due.label}
               </span>
             )}
             {task.priority !== "MEDIUM" && (
-              <span className={cn("inline-flex items-center gap-1", PRIORITY_META[task.priority].className)}>
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1",
+                  PRIORITY_META[task.priority].className,
+                )}
+              >
                 <Flag className="size-3" />
                 {PRIORITY_META[task.priority].label}
               </span>
@@ -113,7 +138,10 @@ export const TaskItem = forwardRef<HTMLLIElement, Props>(function TaskItem(
               </span>
             )}
             {showCreator && task.createdByName && (
-              <span className="inline-flex items-center gap-1" title={`Added by ${task.createdByName}`}>
+              <span
+                className="inline-flex items-center gap-1"
+                title={`Added by ${task.createdByName}`}
+              >
                 <UserRound className="size-3" />
                 {task.createdByName}
               </span>
@@ -130,31 +158,30 @@ export const TaskItem = forwardRef<HTMLLIElement, Props>(function TaskItem(
 
       {!readOnly && (
         <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            disabled={saving}
-            className="opacity-0 group-hover/task:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100"
-            aria-label={`Options for "${task.title}"`}
-          >
-            <MoreHorizontal />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setEditOpen(true)}>
-            <Pencil /> Edit
-          </DropdownMenuItem>
-          <DropdownMenuItem variant="destructive" onSelect={() => remove.mutate(task.id)}>
-            <Trash2 /> Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-          <TaskDialog task={task} open={editOpen} onOpenChange={setEditOpen} />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                disabled={saving}
+                className="opacity-0 group-hover/task:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100"
+                aria-label={`Options for "${task.title}"`}
+              >
+                <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+                <Pencil /> Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem variant="destructive" onSelect={() => remove.mutate(task.id)}>
+                <Trash2 /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </>
       )}
+      <TaskDialog task={task} open={editOpen} onOpenChange={setEditOpen} readOnly={readOnly} />
     </li>
   );
 });

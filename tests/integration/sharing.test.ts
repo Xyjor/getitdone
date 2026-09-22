@@ -1,5 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { call, headersMock, jar, saveSession, TEST_EMAIL_DOMAIN, uniqueEmail, switchToSession } from "./helpers";
+import {
+  call,
+  headersMock,
+  jar,
+  saveSession,
+  TEST_EMAIL_DOMAIN,
+  uniqueEmail,
+  switchToSession,
+  deleteUsers,
+} from "./helpers";
 
 vi.mock("next/headers", () => headersMock);
 
@@ -45,9 +54,17 @@ async function createList(owner: User, name: string) {
   return res.body.list;
 }
 
-async function createTask(u: User, listId: string, title: string, extra: Record<string, unknown> = {}) {
+async function createTask(
+  u: User,
+  listId: string,
+  title: string,
+  extra: Record<string, unknown> = {},
+) {
   as(u);
-  const res = await call<{ task: Task }>(tasks.POST, { method: "POST", body: { title, listId, ...extra } });
+  const res = await call<{ task: Task }>(tasks.POST, {
+    method: "POST",
+    body: { title, listId, ...extra },
+  });
   return res;
 }
 
@@ -69,11 +86,13 @@ async function pendingInvites(u: User) {
 async function share(owner: User, listId: string, u: User, role: "EDITOR" | "VIEWER") {
   expect((await invite(owner, listId, u.email, role)).status).toBe(201);
   const inv = (await pendingInvites(u)).find((i) => i.listId === listId)!;
-  expect((await call(acceptInvite.POST, { method: "POST", params: { id: inv.id } })).status).toBe(200);
+  expect((await call(acceptInvite.POST, { method: "POST", params: { id: inv.id } })).status).toBe(
+    200,
+  );
 }
 
 afterAll(async () => {
-  await db.user.deleteMany({ where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } } });
+  await deleteUsers(db, { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } });
   await db.$disconnect();
 });
 
@@ -85,6 +104,7 @@ describe("permission matrix", () => {
   const who: Record<"owner" | "editor" | "viewer" | "outsider", User> = {} as never;
   let listId = "";
   let taskId = "";
+  const guests: User[] = []; // real accounts to invite (invites need an existing account)
 
   beforeAll(async () => {
     who.owner = await newUser("Olivia");
@@ -95,6 +115,7 @@ describe("permission matrix", () => {
     taskId = (await createTask(who.owner, listId, "Write launch post")).body.task.id;
     await share(who.owner, listId, who.editor, "EDITOR");
     await share(who.owner, listId, who.viewer, "VIEWER");
+    for (let i = 0; i < 4; i++) guests.push(await newUser(`Guest${i}`));
   });
 
   type Action = () => Promise<{ status: number }>;
@@ -114,13 +135,17 @@ describe("permission matrix", () => {
     "reorder tasks": () =>
       call(reorder.POST, { method: "POST", body: { listId, orderedIds: [taskId] } }),
     "rename the list": () =>
-      call(listById.PATCH, { method: "PATCH", params: { id: listId }, body: { name: "Team launch" } }),
+      call(listById.PATCH, {
+        method: "PATCH",
+        params: { id: listId },
+        body: { name: "Team launch" },
+      }),
     "see members": () => call(members.GET, { params: { id: listId } }),
     "invite someone": () =>
       call(listInvites.POST, {
         method: "POST",
         params: { id: listId },
-        body: { email: uniqueEmail("guest"), role: "VIEWER" },
+        body: { email: guests.pop()!.email, role: "VIEWER" },
       }),
     "change a member's role": () =>
       call(memberById.PATCH, {
@@ -132,16 +157,16 @@ describe("permission matrix", () => {
 
   //                              owner  editor viewer outsider
   const expected: Record<string, [number, number, number, number]> = {
-    "view the list":            [200,   200,   200,   404],
-    "view a task":              [200,   200,   200,   404],
-    "add a task":               [201,   201,   403,   404],
-    "complete a task":          [200,   200,   403,   404],
-    "delete a task":            [204,   204,   403,   404],
-    "reorder tasks":            [204,   204,   403,   404],
-    "rename the list":          [200,   403,   403,   404],
-    "see members":              [200,   200,   200,   404],
-    "invite someone":           [201,   403,   403,   404],
-    "change a member's role":   [200,   403,   403,   404],
+    "view the list": [200, 200, 200, 404],
+    "view a task": [200, 200, 200, 404],
+    "add a task": [201, 201, 403, 404],
+    "complete a task": [200, 200, 403, 404],
+    "delete a task": [204, 204, 403, 404],
+    "reorder tasks": [204, 204, 403, 404],
+    "rename the list": [200, 403, 403, 404],
+    "see members": [200, 200, 200, 404],
+    "invite someone": [201, 403, 403, 404],
+    "change a member's role": [200, 403, 403, 404],
   };
 
   const roles = ["owner", "editor", "viewer", "outsider"] as const;
@@ -155,12 +180,20 @@ describe("permission matrix", () => {
   });
 
   it("only the owner can delete the list", async () => {
-    for (const [role, status] of [["editor", 403], ["viewer", 403], ["outsider", 404]] as const) {
+    for (const [role, status] of [
+      ["editor", 403],
+      ["viewer", 403],
+      ["outsider", 404],
+    ] as const) {
       as(who[role]);
-      expect((await call(listById.DELETE, { method: "DELETE", params: { id: listId } })).status).toBe(status);
+      expect(
+        (await call(listById.DELETE, { method: "DELETE", params: { id: listId } })).status,
+      ).toBe(status);
     }
     as(who.owner);
-    expect((await call(listById.DELETE, { method: "DELETE", params: { id: listId } })).status).toBe(204);
+    expect((await call(listById.DELETE, { method: "DELETE", params: { id: listId } })).status).toBe(
+      204,
+    );
     expect(await db.listMember.count({ where: { listId } })).toBe(0);
     expect(await db.listInvite.count({ where: { listId } })).toBe(0);
   });
@@ -181,25 +214,56 @@ describe("invitations", () => {
 
     expect(await pendingInvites(mallory)).toEqual([]);
     as(mallory);
-    expect((await call(acceptInvite.POST, { method: "POST", params: { id: inv.id } })).status).toBe(404);
+    expect((await call(acceptInvite.POST, { method: "POST", params: { id: inv.id } })).status).toBe(
+      404,
+    );
     expect((await call(listById.GET, { params: { id: list.id } })).status).toBe(404);
   });
 
-  it("gives the same answer whether or not the email has an account, and works once they sign up", async () => {
+  it("only invites existing accounts, so nobody can claim an invite by registering that email later", async () => {
     const owner = await newUser("Olga");
     const list = await createList(owner, "Book club");
-    const existing = await newUser("Existing");
     const futureEmail = uniqueEmail("future");
 
-    const a = await invite(owner, list.id, existing.email, "VIEWER");
-    const b = await invite(owner, list.id, futureEmail, "VIEWER");
-    expect(a.status).toBe(b.status);
-    expect(a.body).toEqual(b.body);
+    const res = await invite(owner, list.id, futureEmail, "EDITOR");
+    expect(res.status).toBe(400);
+    expect(await db.listInvite.count({ where: { listId: list.id } })).toBe(0);
 
-    const newcomer = await newUser("Newcomer", futureEmail);
-    const inv = (await pendingInvites(newcomer)).find((i) => i.listId === list.id)!;
-    expect((await call(acceptInvite.POST, { method: "POST", params: { id: inv.id } })).status).toBe(200);
-    expect((await call(listById.GET, { params: { id: list.id } })).status).toBe(200);
+    // Someone registering that address afterwards gets nothing.
+    const squatter = await newUser("Squatter", futureEmail);
+    expect(await pendingInvites(squatter)).toEqual([]);
+  });
+
+  it("matches invites to accounts regardless of email capitalisation", async () => {
+    const owner = await newUser("Olwen");
+    const list = await createList(owner, "Caps");
+    const mixed = await newUser("Mixed", uniqueEmail("MiXeD").replace("mixed", "MiXeD"));
+
+    expect((await invite(owner, list.id, mixed.email.toUpperCase(), "VIEWER")).status).toBe(201);
+    expect((await pendingInvites(mixed)).map((i) => i.listId)).toEqual([list.id]);
+  });
+
+  it("demo accounts can't send invitations to real accounts", async () => {
+    const demo = await import("@/app/api/auth/demo/route");
+    const real = await newUser("RealPerson");
+    jar.clear();
+    const d = await call<{ user: { id: string } }>(demo.POST, { method: "POST" });
+    const demoList = (await call<{ lists: List[] }>(lists.GET)).body.lists.find(
+      (l) => l.role === "OWNER",
+    )!;
+
+    const res = await call(listInvites.POST, {
+      method: "POST",
+      params: { id: demoList.id },
+      body: { email: real.email, role: "EDITOR" },
+    });
+    expect(res.status).toBe(403);
+    expect(await pendingInvites(real)).toEqual([]);
+
+    const companions = await db.list.findMany({
+      where: { members: { some: { userId: d.body.user.id } } },
+    });
+    await deleteUsers(db, { id: { in: [d.body.user.id, ...companions.map((l) => l.userId)] } });
   });
 
   it("re-inviting updates the role instead of duplicating the invite", async () => {
@@ -220,11 +284,16 @@ describe("invitations", () => {
     const list = await createList(owner, "Old plans");
     await invite(owner, list.id, guest.email, "EDITOR");
     const inv = (await pendingInvites(guest))[0]!;
-    await db.listInvite.update({ where: { id: inv.id }, data: { expiresAt: new Date(Date.now() - 1000) } });
+    await db.listInvite.update({
+      where: { id: inv.id },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
 
     expect(await pendingInvites(guest)).toEqual([]);
     as(guest);
-    expect((await call(acceptInvite.POST, { method: "POST", params: { id: inv.id } })).status).toBe(404);
+    expect((await call(acceptInvite.POST, { method: "POST", params: { id: inv.id } })).status).toBe(
+      404,
+    );
   });
 
   it("declining removes the invite without joining", async () => {
@@ -234,7 +303,9 @@ describe("invitations", () => {
     await invite(owner, list.id, guest.email, "EDITOR");
     const inv = (await pendingInvites(guest))[0]!;
 
-    expect((await call(declineInvite.POST, { method: "POST", params: { id: inv.id } })).status).toBe(204);
+    expect(
+      (await call(declineInvite.POST, { method: "POST", params: { id: inv.id } })).status,
+    ).toBe(204);
     expect(await pendingInvites(guest)).toEqual([]);
     expect((await call(listById.GET, { params: { id: list.id } })).status).toBe(404);
   });
@@ -244,19 +315,31 @@ describe("invitations", () => {
     const editor = await newUser("Ed");
     const list = await createList(owner, "Trip");
     await share(owner, list.id, editor, "EDITOR");
-    await invite(owner, list.id, uniqueEmail("pending"), "VIEWER");
+    await invite(owner, list.id, (await newUser("PendingPerson")).email, "VIEWER");
 
     as(owner);
-    const ownerView = await call<{ invites?: { id: string }[] }>(members.GET, { params: { id: list.id } });
+    const ownerView = await call<{ invites?: { id: string }[] }>(members.GET, {
+      params: { id: list.id },
+    });
     expect(ownerView.body.invites).toHaveLength(1);
 
     as(editor);
-    const editorView = await call<{ invites?: unknown[] }>(members.GET, { params: { id: list.id } });
+    const editorView = await call<{ invites?: unknown[]; members: { email?: string }[] }>(
+      members.GET,
+      {
+        params: { id: list.id },
+      },
+    );
     expect(editorView.body.invites).toBeUndefined();
+    // Collaborators see names, not each other's email addresses.
+    expect(editorView.body.members.every((m) => m.email === undefined)).toBe(true);
 
     as(owner);
     const inviteId = ownerView.body.invites![0]!.id;
-    const del = await call(listInviteById.DELETE, { method: "DELETE", params: { id: list.id, inviteId } });
+    const del = await call(listInviteById.DELETE, {
+      method: "DELETE",
+      params: { id: list.id, inviteId },
+    });
     expect(del.status).toBe(204);
     expect(await db.listInvite.count({ where: { listId: list.id } })).toBe(0);
   });
@@ -289,6 +372,108 @@ describe("invitations", () => {
 
 // ---------------------------------------------------------------------------------------------
 
+describe("tampering with ids from another list", () => {
+  it("can't use your own list's URL to touch another list's invites or members", async () => {
+    const attacker = await newUser("Attila");
+    const victim = await newUser("Vic");
+    const member = await newUser("Mo");
+    const attackerList = await createList(attacker, "Mine");
+    const victimList = await createList(victim, "Theirs");
+    await share(victim, victimList.id, member, "EDITOR");
+    await invite(victim, victimList.id, (await newUser("Pending")).email, "VIEWER");
+    const victimInvite = await db.listInvite.findFirstOrThrow({ where: { listId: victimList.id } });
+
+    as(attacker);
+    const params = (extra: Record<string, string>) => ({
+      params: { id: attackerList.id, ...extra },
+    });
+    expect(
+      (
+        await call(listInviteById.DELETE, {
+          method: "DELETE",
+          ...params({ inviteId: victimInvite.id }),
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await call(memberById.PATCH, {
+          method: "PATCH",
+          ...params({ userId: member.id }),
+          body: { role: "VIEWER" },
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (await call(memberById.DELETE, { method: "DELETE", ...params({ userId: member.id }) }))
+        .status,
+    ).toBe(404);
+
+    expect(await db.listInvite.count({ where: { id: victimInvite.id } })).toBe(1);
+    expect(
+      (
+        await db.listMember.findFirstOrThrow({
+          where: { listId: victimList.id, userId: member.id },
+        })
+      ).role,
+    ).toBe("EDITOR");
+  });
+
+  it("editors and viewers can't remove other members", async () => {
+    const owner = await newUser("Oswin");
+    const editor = await newUser("Edda");
+    const viewer = await newUser("Vince");
+    const list = await createList(owner, "Team");
+    await share(owner, list.id, editor, "EDITOR");
+    await share(owner, list.id, viewer, "VIEWER");
+
+    as(editor);
+    expect(
+      (
+        await call(memberById.DELETE, {
+          method: "DELETE",
+          params: { id: list.id, userId: viewer.id },
+        })
+      ).status,
+    ).toBe(403);
+    as(viewer);
+    expect(
+      (
+        await call(memberById.DELETE, {
+          method: "DELETE",
+          params: { id: list.id, userId: editor.id },
+        })
+      ).status,
+    ).toBe(403);
+  });
+
+  it("reorder rejects task ids from another list", async () => {
+    const owner = await newUser("Ozzy");
+    const a = await createList(owner, "A");
+    const b = await createList(owner, "B");
+    const inA = (await createTask(owner, a.id, "in A")).body.task.id;
+    const inB = (await createTask(owner, b.id, "in B")).body.task.id;
+
+    as(owner);
+    const res = await call(reorder.POST, {
+      method: "POST",
+      body: { listId: a.id, orderedIds: [inA, inB] },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("an outsider asking for another list's tasks just gets nothing", async () => {
+    const owner = await newUser("Ottilie");
+    const outsider = await newUser("Outis");
+    const list = await createList(owner, "Hidden");
+    await createTask(owner, list.id, "hidden task");
+
+    as(outsider);
+    const res = await call<{ tasks: Task[] }>(tasks.GET, { search: { listId: list.id } });
+    expect(res.body.tasks).toEqual([]);
+  });
+});
+
 describe("membership changes", () => {
   it("a removed member loses access immediately", async () => {
     const owner = await newUser("Omar");
@@ -297,7 +482,10 @@ describe("membership changes", () => {
     await share(owner, list.id, ex, "EDITOR");
 
     as(owner);
-    const res = await call(memberById.DELETE, { method: "DELETE", params: { id: list.id, userId: ex.id } });
+    const res = await call(memberById.DELETE, {
+      method: "DELETE",
+      params: { id: list.id, userId: ex.id },
+    });
     expect(res.status).toBe(204);
 
     as(ex);
@@ -311,7 +499,10 @@ describe("membership changes", () => {
     await share(owner, list.id, leaver, "VIEWER");
 
     as(leaver);
-    const left = await call(memberById.DELETE, { method: "DELETE", params: { id: list.id, userId: leaver.id } });
+    const left = await call(memberById.DELETE, {
+      method: "DELETE",
+      params: { id: list.id, userId: leaver.id },
+    });
     expect(left.status).toBe(204);
     expect((await call(listById.GET, { params: { id: list.id } })).status).toBe(404);
 
@@ -346,7 +537,9 @@ describe("membership changes", () => {
     await share(owner, list.id, member, "EDITOR");
 
     as(owner);
-    expect((await call(account.DELETE, { method: "DELETE", body: { password: PASSWORD } })).status).toBe(204);
+    expect(
+      (await call(account.DELETE, { method: "DELETE", body: { password: PASSWORD } })).status,
+    ).toBe(204);
 
     as(member);
     expect((await call(listById.GET, { params: { id: list.id } })).status).toBe(404);
@@ -388,11 +581,15 @@ describe("shared lists in the app's views", () => {
   it("tells the owner about pending invites so their page can start refreshing", async () => {
     const owner = await newUser("Oakley");
     const list = await createList(owner, "Pending");
-    await invite(owner, list.id, uniqueEmail("later"), "EDITOR");
+    await invite(owner, list.id, (await newUser("Later")).email, "EDITOR");
 
     as(owner);
-    const mine = (await call<{ lists: (List & { pendingInviteCount: number })[] }>(lists.GET)).body.lists;
-    expect(mine.find((l) => l.id === list.id)).toMatchObject({ memberCount: 0, pendingInviteCount: 1 });
+    const mine = (await call<{ lists: (List & { pendingInviteCount: number })[] }>(lists.GET)).body
+      .lists;
+    expect(mine.find((l) => l.id === list.id)).toMatchObject({
+      memberCount: 0,
+      pendingInviteCount: 1,
+    });
   });
 
   it("includes shared tasks in Today and search, with who added them", async () => {
@@ -403,7 +600,9 @@ describe("shared lists in the app's views", () => {
     await createTask(owner, list.id, "Shared deadline zebra", { dueDate: "2026-09-21" });
 
     as(member);
-    const today = await call<{ tasks: Task[] }>(tasks.GET, { search: { view: "today", today: "2026-09-21" } });
+    const today = await call<{ tasks: Task[] }>(tasks.GET, {
+      search: { view: "today", today: "2026-09-21" },
+    });
     const found = today.body.tasks.find((t) => t.title === "Shared deadline zebra");
     expect(found?.createdByName).toBe("Oriel");
 
@@ -418,7 +617,9 @@ describe("shared lists in the app's views", () => {
     await share(owner, list.id, viewer, "VIEWER");
 
     as(viewer);
-    const myList = (await call<{ lists: List[] }>(lists.GET)).body.lists.find((l) => l.role === "OWNER")!;
+    const myList = (await call<{ lists: List[] }>(lists.GET)).body.lists.find(
+      (l) => l.role === "OWNER",
+    )!;
     const mine = (await createTask(viewer, myList.id, "Mine")).body.task;
     as(viewer);
     const move = await call(taskById.PATCH, {
@@ -443,15 +644,21 @@ describe("demo showcase", () => {
     const shared = mine.find((l) => l.role !== "OWNER");
     expect(shared).toMatchObject({ role: "EDITOR", ownerName: "Sam (demo)" });
 
-    const sharedTasks = (await call<{ tasks: Task[] }>(tasks.GET, { search: { listId: shared!.id } })).body.tasks;
-    expect(new Set(sharedTasks.map((t) => t.createdByName))).toEqual(new Set(["Sam (demo)", "Demo User"]));
+    const sharedTasks = (
+      await call<{ tasks: Task[] }>(tasks.GET, { search: { listId: shared!.id } })
+    ).body.tasks;
+    expect(new Set(sharedTasks.map((t) => t.createdByName))).toEqual(
+      new Set(["Sam (demo)", "Demo User"]),
+    );
 
     const invites = (await call<{ invites: Invite[] }>(myInvites.GET)).body.invites;
     expect(invites).toHaveLength(1);
     expect(invites[0]!.invitedByName).toBe("Sam (demo)");
 
     // Clean up the visitor and their companion (both are demo accounts).
-    const companionIds = (await db.list.findMany({ where: { id: shared!.id }, select: { userId: true } })).map((l) => l.userId);
-    await db.user.deleteMany({ where: { id: { in: [res.body.user.id, ...companionIds] } } });
+    const companionIds = (
+      await db.list.findMany({ where: { id: shared!.id }, select: { userId: true } })
+    ).map((l) => l.userId);
+    await deleteUsers(db, { id: { in: [res.body.user.id, ...companionIds] } });
   });
 });

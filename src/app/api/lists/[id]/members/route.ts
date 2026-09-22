@@ -8,7 +8,7 @@ type Ctx = { params: Promise<{ id: string }> };
 
 /**
  * GET /api/lists/:id/members: the owner and everyone the list is shared with.
- * Pending invites are included only for the owner.
+ * Only the owner gets email addresses and pending invites; collaborators see names.
  */
 export const GET = route<Ctx>(async (_req, { params }) => {
   const user = await requireUser();
@@ -31,14 +31,19 @@ export const GET = route<Ctx>(async (_req, { params }) => {
     },
   });
 
+  const isOwner = role === "OWNER";
+  const person = (
+    u: { id: string; name: string; email: string },
+    r: MemberDTO["role"],
+  ): MemberDTO => ({
+    userId: u.id,
+    name: u.name,
+    ...(isOwner && { email: u.email }),
+    role: r,
+  });
   const members: MemberDTO[] = [
-    { userId: list.user.id, name: list.user.name, email: list.user.email, role: "OWNER" },
-    ...list.members.map((m) => ({
-      userId: m.user.id,
-      name: m.user.name,
-      email: m.user.email,
-      role: m.role,
-    })),
+    person(list.user, "OWNER"),
+    ...list.members.map((m) => person(m.user, m.role)),
   ];
   const invites: ListInviteDTO[] | undefined = list.invites
     ? list.invites.map((i) => ({ ...i, expiresAt: i.expiresAt.toISOString() }))

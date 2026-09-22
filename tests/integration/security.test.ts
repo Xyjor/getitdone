@@ -8,6 +8,7 @@ import {
   TEST_EMAIL_DOMAIN,
   uniqueEmail,
   switchToSession,
+  deleteUsers,
 } from "./helpers";
 
 vi.mock("next/headers", () => headersMock);
@@ -28,7 +29,13 @@ const cron = await import("@/app/api/cron/cleanup/route");
 const lists = await import("@/app/api/lists/route");
 
 type ErrorBody = { error: { message: string; fieldErrors?: Record<string, string[]> } };
-type SessionRow = { id: string; device: string; current: boolean; createdAt: string; lastSeenAt: string };
+type SessionRow = {
+  id: string;
+  device: string;
+  current: boolean;
+  createdAt: string;
+  lastSeenAt: string;
+};
 
 const PASSWORD = "password123";
 const demoUserIds: string[] = [];
@@ -56,8 +63,8 @@ async function loginAgain(email: string, pw = PASSWORD) {
 const isLoggedIn = async () => (await call(me.GET)).status === 200;
 
 afterAll(async () => {
-  await db.user.deleteMany({
-    where: { OR: [{ email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } }, { id: { in: demoUserIds } }] },
+  await deleteUsers(db, {
+    OR: [{ email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } }, { id: { in: demoUserIds } }],
   });
   await db.$disconnect();
 });
@@ -100,7 +107,9 @@ describe("revocable sessions", () => {
     expect(list.body.sessions[0]!.device).toBe("Chrome on Windows");
 
     const other = list.body.sessions.find((s) => !s.current)!;
-    expect((await call(sessionById.DELETE, { method: "DELETE", params: { id: other.id } })).status).toBe(204);
+    expect(
+      (await call(sessionById.DELETE, { method: "DELETE", params: { id: other.id } })).status,
+    ).toBe(204);
 
     switchToSession(phone);
     expect(await isLoggedIn()).toBe(false);
@@ -127,11 +136,15 @@ describe("revocable sessions", () => {
 
   it("cannot revoke another user's session", async () => {
     await signUp("victim");
-    const victimSessionId = (await call<{ sessions: SessionRow[] }>(sessions.GET)).body.sessions[0]!.id;
+    const victimSessionId = (await call<{ sessions: SessionRow[] }>(sessions.GET)).body.sessions[0]!
+      .id;
     const victim = saveSession();
 
     await signUp("attacker");
-    const res = await call(sessionById.DELETE, { method: "DELETE", params: { id: victimSessionId } });
+    const res = await call(sessionById.DELETE, {
+      method: "DELETE",
+      params: { id: victimSessionId },
+    });
     expect(res.status).toBe(404);
 
     switchToSession(victim);
@@ -140,7 +153,10 @@ describe("revocable sessions", () => {
 
   it("rejects a session that has expired in the database", async () => {
     const { id } = await signUp();
-    await db.session.updateMany({ where: { userId: id }, data: { expiresAt: new Date(Date.now() - 1000) } });
+    await db.session.updateMany({
+      where: { userId: id },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
     expect(await isLoggedIn()).toBe(false);
   });
 });
@@ -172,9 +188,16 @@ describe("account", () => {
     expect(await isLoggedIn()).toBe(false);
 
     jar.clear();
-    expect((await call(login.POST, { method: "POST", body: { email, password: PASSWORD } })).status).toBe(401);
     expect(
-      (await call(login.POST, { method: "POST", body: { email, password: "a-brand-new-password" } })).status,
+      (await call(login.POST, { method: "POST", body: { email, password: PASSWORD } })).status,
+    ).toBe(401);
+    expect(
+      (
+        await call(login.POST, {
+          method: "POST",
+          body: { email, password: "a-brand-new-password" },
+        })
+      ).status,
     ).toBe(200);
   });
 
@@ -199,7 +222,9 @@ describe("account", () => {
     expect(jar.size).toBe(0);
     expect(await db.user.findUnique({ where: { id } })).toBeNull();
     expect(await db.list.count({ where: { userId: id } })).toBe(0);
-    expect((await call(login.POST, { method: "POST", body: { email, password: PASSWORD } })).status).toBe(401);
+    expect(
+      (await call(login.POST, { method: "POST", body: { email, password: PASSWORD } })).status,
+    ).toBe(401);
   });
 
   it("does not let demo accounts change their password, but lets them delete the account", async () => {
@@ -223,10 +248,16 @@ describe("rate limiting", () => {
     jar.clear();
 
     for (let i = 0; i < 5; i++) {
-      const res = await call(login.POST, { method: "POST", body: { email, password: "wrong-password" } });
+      const res = await call(login.POST, {
+        method: "POST",
+        body: { email, password: "wrong-password" },
+      });
       expect(res.status).toBe(401);
     }
-    const locked = await call<ErrorBody>(login.POST, { method: "POST", body: { email, password: PASSWORD } });
+    const locked = await call<ErrorBody>(login.POST, {
+      method: "POST",
+      body: { email, password: PASSWORD },
+    });
     expect(locked.status).toBe(429);
     expect(Number(locked.headers.get("retry-after"))).toBeGreaterThan(0);
   });
@@ -263,7 +294,9 @@ describe("rate limiting", () => {
     });
 
     await signUp("window", ip);
-    const row = await db.rateLimit.findUniqueOrThrow({ where: { key: hashKey(`register:ip:${ip}`) } });
+    const row = await db.rateLimit.findUniqueOrThrow({
+      where: { key: hashKey(`register:ip:${ip}`) },
+    });
     expect(row.count).toBe(1);
   });
 
@@ -286,12 +319,16 @@ describe("rate limiting", () => {
     for (let i = 0; i < 4; i++) {
       await call(login.POST, { method: "POST", body: { email, password: "wrong-password" } });
     }
-    expect((await call(login.POST, { method: "POST", body: { email, password: PASSWORD } })).status).toBe(200);
+    expect(
+      (await call(login.POST, { method: "POST", body: { email, password: PASSWORD } })).status,
+    ).toBe(200);
 
     for (let i = 0; i < 4; i++) {
       await call(login.POST, { method: "POST", body: { email, password: "wrong-password" } });
     }
-    expect((await call(login.POST, { method: "POST", body: { email, password: PASSWORD } })).status).toBe(200);
+    expect(
+      (await call(login.POST, { method: "POST", body: { email, password: PASSWORD } })).status,
+    ).toBe(200);
   });
 
   it("limits sign-ups to 5 per hour per IP address", async () => {
@@ -323,7 +360,9 @@ describe("rate limiting", () => {
     const ip = randomIp();
     const email = uniqueEmail("hash");
     await call(login.POST, { method: "POST", ip, body: { email, password: "whatever" } });
-    const rows = await db.rateLimit.findMany({ where: { OR: [{ key: { contains: ip } }, { key: { contains: email } }] } });
+    const rows = await db.rateLimit.findMany({
+      where: { OR: [{ key: { contains: ip } }, { key: { contains: email } }] },
+    });
     expect(rows).toEqual([]);
   });
 });
@@ -336,7 +375,10 @@ describe("cleanup cron", () => {
 
   it("removes expired sessions and old demo accounts", async () => {
     const { id } = await signUp();
-    await db.session.updateMany({ where: { userId: id }, data: { expiresAt: new Date(Date.now() - 1000) } });
+    await db.session.updateMany({
+      where: { userId: id },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
 
     const oldDemo = await db.user.create({
       data: {
@@ -349,10 +391,37 @@ describe("cleanup cron", () => {
     });
     demoUserIds.push(oldDemo.id);
 
-    const res = await call(cron.GET, { headers: { authorization: `Bearer ${process.env.CRON_SECRET}` } });
+    const res = await call(cron.GET, {
+      headers: { authorization: `Bearer ${process.env.CRON_SECRET}` },
+    });
     expect(res.status).toBe(200);
     expect(await db.session.count({ where: { userId: id } })).toBe(0);
     expect(await db.user.findUnique({ where: { id: oldDemo.id } })).toBeNull();
+  });
+});
+
+describe("cleanup cron with shared demo data", () => {
+  it("removes an old demo visitor together with their companion and shared lists", async () => {
+    jar.clear();
+    const res = await call<{ user: { id: string } }>(demo.POST, { method: "POST" });
+    const visitorId = res.body.user.id;
+    const sharedWithVisitor = await db.list.findMany({
+      where: { members: { some: { userId: visitorId } } },
+    });
+    const companionIds = [...new Set(sharedWithVisitor.map((l) => l.userId))];
+    const ids = [visitorId, ...companionIds];
+    demoUserIds.push(...ids);
+
+    // Age both accounts past the 24h limit, then run the cron.
+    await db.user.updateMany({
+      where: { id: { in: ids } },
+      data: { createdAt: new Date(Date.now() - 2 * 86_400_000) },
+    });
+    const run = await call(cron.GET, {
+      headers: { authorization: `Bearer ${process.env.CRON_SECRET}` },
+    });
+    expect(run.status).toBe(200);
+    expect(await db.user.count({ where: { id: { in: ids } } })).toBe(0);
   });
 });
 

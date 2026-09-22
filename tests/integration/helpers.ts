@@ -20,6 +20,21 @@ export const TEST_EMAIL_DOMAIN = "test.getitdone.local";
 export const uniqueEmail = (label: string) =>
   `${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@${TEST_EMAIL_DOMAIN}`;
 
+/**
+ * Deletes users safely: their lists first, then the users. (Deleting several users that share
+ * lists in one statement makes Postgres both cascade and null the same task rows.)
+ */
+export async function deleteUsers(
+  db: {
+    list: { deleteMany: (a: object) => Promise<unknown> };
+    user: { deleteMany: (a: object) => Promise<unknown> };
+  },
+  where: object,
+) {
+  await db.list.deleteMany({ where: { user: where } });
+  await db.user.deleteMany({ where });
+}
+
 /** A random client IP, so unrelated tests never share a rate-limit bucket. */
 export const randomIp = () =>
   `10.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
@@ -52,14 +67,19 @@ export async function call<T = Record<string, unknown>>(handler: Handler, opts: 
   for (const [k, v] of Object.entries(opts.search ?? {})) url.searchParams.set(k, v);
 
   const body =
-    opts.body === undefined ? undefined : typeof opts.body === "string" ? opts.body : JSON.stringify(opts.body);
+    opts.body === undefined
+      ? undefined
+      : typeof opts.body === "string"
+        ? opts.body
+        : JSON.stringify(opts.body);
 
   const req = new NextRequest(url, {
     method: opts.method ?? "GET",
     headers: {
       host: "localhost:3000",
       "content-type": "application/json",
-      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36",
+      "user-agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36",
       "x-forwarded-for": opts.ip ?? randomIp(),
       ...opts.headers,
     },

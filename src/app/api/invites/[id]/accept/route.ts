@@ -15,7 +15,7 @@ export const POST = route<Ctx>(async (_req, { params }) => {
     db.listMember.upsert({
       where: { listId_userId: { listId: invite.listId, userId: user.id } },
       create: { listId: invite.listId, userId: user.id, role: invite.role },
-      update: { role: invite.role },
+      update: {}, // already a member: keep whatever role the owner has set since
     }),
     db.listInvite.delete({ where: { id: invite.id } }),
   ]);

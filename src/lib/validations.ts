@@ -66,13 +66,12 @@ export const listCreateSchema = z.object({
 
 // Separate from the create schema on purpose: `.partial()` would keep the color default,
 // so renaming a list would silently reset its color.
-export const listUpdateSchema = z.object({
-  name: listName.optional(),
-  color: z.enum(LIST_COLORS).optional(),
-}).refine(
-  (v) => Object.keys(v).length > 0,
-  "Nothing to update",
-);
+export const listUpdateSchema = z
+  .object({
+    name: listName.optional(),
+    color: z.enum(LIST_COLORS).optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, "Nothing to update");
 
 /** Calendar date in YYYY-MM-DD form (due dates have no time or timezone). */
 const dateOnly = z.iso.date("Use the YYYY-MM-DD date format");

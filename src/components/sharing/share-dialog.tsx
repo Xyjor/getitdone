@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import {
   useChangeRole,
   useMembers,
@@ -33,7 +34,11 @@ import type { ListDTO } from "@/lib/types";
 import { initials } from "@/lib/ui";
 import { inviteSchema, type MemberRoleValue } from "@/lib/validations";
 
-const ROLE_LABEL: Record<string, string> = { OWNER: "Owner", EDITOR: "Can edit", VIEWER: "Can view" };
+const ROLE_LABEL: Record<string, string> = {
+  OWNER: "Owner",
+  EDITOR: "Can edit",
+  VIEWER: "Can view",
+};
 
 type Props = { list: ListDTO; open: boolean; onOpenChange: (open: boolean) => void };
 
@@ -44,8 +49,8 @@ export function ShareDialog({ list, open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>Share &ldquo;{list.name}&rdquo;</DialogTitle>
           <DialogDescription>
-            Invite people by email. They&apos;ll see the invitation in GetItDone (or after they sign up
-            with that address).
+            Invite people who have a GetItDone account. They&apos;ll see the invitation next time
+            they open the app.
           </DialogDescription>
         </DialogHeader>
         {open && <ShareContent listId={list.id} />}
@@ -63,6 +68,7 @@ function ShareContent({ listId }: { listId: string }) {
   const changeRole = useChangeRole(listId);
   const remove = useRemoveMember(listId);
   const revoke = useRevokeInvite(listId);
+  const [removing, setRemoving] = useState<{ userId: string; name: string } | null>(null);
 
   function onInvite(e: React.FormEvent) {
     e.preventDefault();
@@ -71,13 +77,21 @@ function ShareContent({ listId }: { listId: string }) {
     send.mutate(parsed.data, {
       onSuccess: () => setEmail(""),
       onError: (err) =>
-        setError(err instanceof ApiClientError ? (err.fieldErrors?.email?.[0] ?? err.message) : "Something went wrong"),
+        setError(
+          err instanceof ApiClientError
+            ? (err.fieldErrors?.email?.[0] ?? err.message)
+            : "Something went wrong",
+        ),
     });
   }
 
   return (
     <div className="space-y-5">
-      <form onSubmit={onInvite} noValidate className="flex flex-col gap-2 sm:flex-row sm:items-start">
+      <form
+        onSubmit={onInvite}
+        noValidate
+        className="flex flex-col gap-2 sm:flex-row sm:items-start"
+      >
         <Field data-invalid={!!error} className="flex-1">
           <Input
             type="email"
@@ -134,7 +148,10 @@ function ShareContent({ listId }: { listId: string }) {
                 <div className="flex items-center gap-1">
                   <Select
                     value={m.role}
-                    onValueChange={(v) => changeRole.mutate({ userId: m.userId, role: v as MemberRoleValue })}
+                    disabled={changeRole.isPending}
+                    onValueChange={(v) =>
+                      changeRole.mutate({ userId: m.userId, role: v as MemberRoleValue })
+                    }
                   >
                     <SelectTrigger size="sm" className="w-28" aria-label={`Role for ${m.name}`}>
                       <SelectValue />
@@ -148,7 +165,8 @@ function ShareContent({ listId }: { listId: string }) {
                     variant="ghost"
                     size="icon-sm"
                     aria-label={`Remove ${m.name}`}
-                    onClick={() => remove.mutate(m.userId)}
+                    disabled={remove.isPending}
+                    onClick={() => setRemoving({ userId: m.userId, name: m.name })}
                   >
                     <X />
                   </Button>
@@ -165,13 +183,27 @@ function ShareContent({ listId }: { listId: string }) {
                 <p className="truncate text-sm">{i.email}</p>
                 <p className="text-xs text-muted-foreground">Invited · {ROLE_LABEL[i.role]}</p>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => revoke.mutate(i.id)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={revoke.isPending}
+                onClick={() => revoke.mutate(i.id)}
+              >
                 Revoke
               </Button>
             </li>
           ))}
         </ul>
       </div>
+
+      <ConfirmDialog
+        open={!!removing}
+        onOpenChange={(o) => !o && setRemoving(null)}
+        title={`Remove ${removing?.name ?? ""}?`}
+        description="They'll lose access to this list right away. You can invite them again later."
+        confirmLabel="Remove"
+        onConfirm={() => removing && remove.mutate(removing.userId)}
+      />
     </div>
   );
 }

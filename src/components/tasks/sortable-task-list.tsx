@@ -47,7 +47,8 @@ export function SortableTaskList({ listId, tasks, today, showCreator }: Props) {
       onDragEnd={onDragEnd}
       accessibility={{
         screenReaderInstructions: {
-          draggable: "To reorder, press Space. Use the arrow keys to move, Space to drop, Escape to cancel.",
+          draggable:
+            "To reorder, press Space. Use the arrow keys to move, Space to drop, Escape to cancel.",
         },
       }}
     >

@@ -38,7 +38,9 @@ export function InvitationsDialog({ open, onOpenChange, onNavigate }: Props) {
           <ul className="divide-y rounded-lg border">
             {invites.map((inv) => (
               <li key={inv.id} className="flex items-center gap-3 p-3">
-                <span className={cn("size-3 shrink-0 rounded-full", LIST_COLOR_CLASSES[inv.listColor])} />
+                <span
+                  className={cn("size-3 shrink-0 rounded-full", LIST_COLOR_CLASSES[inv.listColor])}
+                />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{inv.listName}</p>
                   <p className="text-xs text-muted-foreground">

@@ -107,7 +107,9 @@ export function Sidebar({ user, onNavigate }: Props) {
         </ul>
 
         <div className="mt-6 mb-1 flex items-center justify-between px-2">
-          <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">My lists</h2>
+          <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            My lists
+          </h2>
           <Button
             variant="ghost"
             size="icon-xs"
@@ -227,14 +229,22 @@ function ListNavItem({
 
   return (
     <li className="group/list relative">
-      <NavLink href={`/app/lists/${list.id}`} active={active} onNavigate={onNavigate} className="pr-9">
+      <NavLink
+        href={`/app/lists/${list.id}`}
+        active={active}
+        onNavigate={onNavigate}
+        className="pr-9"
+      >
         <span className={cn("size-2.5 shrink-0 rounded-full", LIST_COLOR_CLASSES[list.color])} />
         <span className="truncate">{list.name}</span>
         {isOwner && list.memberCount > 0 && (
-          <Users className="size-3.5 shrink-0 text-muted-foreground" aria-label="Shared" />
+          <>
+            <Users className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="sr-only">(shared)</span>
+          </>
         )}
         {list.openCount > 0 && (
-          <span className="ml-auto text-xs text-muted-foreground tabular-nums group-hover/list:opacity-0 group-focus-within/list:opacity-0">
+          <span className="ml-auto text-xs text-muted-foreground tabular-nums group-focus-within/list:opacity-0 group-hover/list:opacity-0">
             {list.openCount}
           </span>
         )}
@@ -366,7 +376,11 @@ function UserMenu({ user }: { user: UserDTO }) {
           <ChevronsUpDown className="size-4 text-muted-foreground" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-(--radix-dropdown-menu-trigger-width) min-w-56">
+      <DropdownMenuContent
+        side="top"
+        align="start"
+        className="w-(--radix-dropdown-menu-trigger-width) min-w-56"
+      >
         <DropdownMenuLabel>Theme</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
           <DropdownMenuRadioItem value="light">

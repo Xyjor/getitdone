@@ -31,7 +31,8 @@ export type ListDTO = {
 
 export type ListRoleValue = "OWNER" | MemberRoleValue;
 
-export type MemberDTO = { userId: string; name: string; email: string; role: ListRoleValue };
+/** `email` is only included for the list owner. */
+export type MemberDTO = { userId: string; name: string; email?: string; role: ListRoleValue };
 
 /** A pending invite, as seen by the list owner. */
 export type ListInviteDTO = { id: string; email: string; role: MemberRoleValue; expiresAt: string };
