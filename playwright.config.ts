@@ -3,6 +3,11 @@ import { defineConfig, devices } from "@playwright/test";
 const PORT = Number(process.env.PORT ?? 3000);
 const baseURL = process.env.E2E_BASE_URL ?? `http://localhost:${PORT}`;
 
+// Each worker pretends to be a different client IP so repeated local runs don't hit the
+// per-IP rate limits. (On Vercel this header is overwritten by the platform, so it can't be spoofed.)
+const r = () => Math.floor(Math.random() * 256);
+const workerIp = `10.${r()}.${r()}.${r()}`;
+
 export default defineConfig({
   testDir: "./e2e",
   globalTeardown: "./e2e/global-teardown.ts",
@@ -14,6 +19,7 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   use: {
     baseURL,
+    extraHTTPHeaders: { "x-forwarded-for": workerIp },
     trace: "on-first-retry",
   },
   projects: [

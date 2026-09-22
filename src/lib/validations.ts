@@ -28,14 +28,14 @@ const email = z
   .toLowerCase()
   .pipe(z.email("Enter a valid email address").max(254, "Email is too long"));
 
-export const registerSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(60, "Name is too long"),
-  email,
-  password: z
-    .string()
-    .min(8, "Password must be at least 8 characters")
-    .max(72, "Password must be at most 72 characters"), // bcrypt only uses the first 72 bytes
-});
+const name = z.string().trim().min(1, "Name is required").max(60, "Name is too long");
+
+const newPassword = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .max(72, "Password must be at most 72 characters"); // bcrypt only uses the first 72 bytes
+
+export const registerSchema = z.object({ name, email, password: newPassword });
 
 export const loginSchema = z.object({
   email,
@@ -43,6 +43,21 @@ export const loginSchema = z.object({
 });
 
 const listName = z.string().trim().min(1, "List name is required").max(50, "List name is too long");
+
+export const accountUpdateSchema = z.object({ name });
+
+export const passwordChangeSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Enter your current password").max(72),
+    newPassword,
+  })
+  .refine((v) => v.currentPassword !== v.newPassword, {
+    message: "Choose a password you aren't already using",
+    path: ["newPassword"],
+  });
+
+/** Password is optional because demo accounts don't have one the visitor knows. */
+export const accountDeleteSchema = z.object({ password: z.string().max(72).optional() });
 
 export const listCreateSchema = z.object({
   name: listName,
@@ -95,6 +110,7 @@ export const reorderSchema = z.object({
   orderedIds: z.array(z.string().min(1)).min(1).max(1000),
 });
 
+export type PasswordChangeInput = z.infer<typeof passwordChangeSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ListCreateInput = z.input<typeof listCreateSchema>;

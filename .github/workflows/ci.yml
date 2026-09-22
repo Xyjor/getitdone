@@ -32,6 +32,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://getitdone:getitdone@localhost:5432/getitdone?schema=public
       JWT_SECRET: ci-only-secret-that-is-at-least-32-characters
+      CRON_SECRET: ci-only-cron-secret
 
     steps:
       - uses: actions/checkout@v4

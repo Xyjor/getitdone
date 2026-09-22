@@ -4,22 +4,17 @@ import { db } from "@/lib/db";
 import { route } from "@/lib/api";
 import { hashPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
+import { LIMITS, rateLimit } from "@/lib/rate-limit";
+import { clientIp } from "@/lib/request";
 import { DEMO_EMAIL_DOMAIN, createSampleData } from "@/lib/sample-data";
-
-const DEMO_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Creates a throwaway account pre-filled with sample data and signs the visitor in.
  * Each visitor gets their own sandbox, so demo users never see each other's changes.
+ * Old demo accounts are removed by the daily cleanup cron (/api/cron/cleanup).
  */
-export const POST = route(async () => {
-  // Housekeeping: remove demo accounts older than a day (lists/tasks cascade).
-  await db.user.deleteMany({
-    where: {
-      email: { endsWith: `@${DEMO_EMAIL_DOMAIN}` },
-      createdAt: { lt: new Date(Date.now() - DEMO_MAX_AGE_MS) },
-    },
-  });
+export const POST = route(async (req) => {
+  await rateLimit(`demo:ip:${clientIp(req.headers)}`, LIMITS.demoPerIp);
 
   const id = randomBytes(6).toString("hex");
   // Random password nobody knows: demo accounts are only reachable via this endpoint.
@@ -30,13 +25,14 @@ export const POST = route(async () => {
         name: "Demo User",
         email: `demo-${id}@${DEMO_EMAIL_DOMAIN}`,
         passwordHash,
+        isDemo: true,
       },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, isDemo: true },
     });
     await createSampleData(tx, created.id);
     return created;
   });
 
-  await createSession(user.id);
+  await createSession(user.id, req);
   return NextResponse.json({ user }, { status: 201 });
 });

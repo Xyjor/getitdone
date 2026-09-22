@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { call, headersMock, jar, TEST_EMAIL_DOMAIN, uniqueEmail } from "./helpers";
+import { call, headersMock, jar, TEST_EMAIL_DOMAIN, uniqueEmail, useSession } from "./helpers";
 
 vi.mock("next/headers", () => headersMock);
 
@@ -35,11 +35,6 @@ async function signUp(label = "user") {
   });
   expect(res.status).toBe(201);
   return { email, id: res.body.user.id, session: new Map(jar) };
-}
-
-function useSession(session: Map<string, string>) {
-  jar.clear();
-  session.forEach((v, k) => jar.set(k, v));
 }
 
 const createList = async (name: string) =>
