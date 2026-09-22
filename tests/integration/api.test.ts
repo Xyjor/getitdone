@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { call, headersMock, jar, TEST_EMAIL_DOMAIN, uniqueEmail, useSession } from "./helpers";
+import { call, headersMock, jar, TEST_EMAIL_DOMAIN, uniqueEmail, switchToSession } from "./helpers";
 
 vi.mock("next/headers", () => headersMock);
 
@@ -304,7 +304,7 @@ describe("data isolation between users", () => {
     expect(move.status).toBe(404);
 
     // Alice's data is untouched.
-    useSession(alice.session);
+    switchToSession(alice.session);
     const check = await call<TaskBody>(taskById.GET, params(aliceTask.id));
     expect(check.body.task).toMatchObject({ title: "Secret", completed: false });
   });

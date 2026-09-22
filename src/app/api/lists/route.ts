@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { parseBody, requireUser, route, toListDTO } from "@/lib/api";
-import { accessibleListsWhere } from "@/lib/access";
+import { accessibleListsWhere, listSummaryInclude, toListSummary } from "@/lib/access";
 import { listCreateSchema } from "@/lib/validations";
 
 export const GET = route(async () => {
@@ -10,10 +10,10 @@ export const GET = route(async () => {
   const lists = await db.list.findMany({
     where: accessibleListsWhere(user.id),
     orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-    include: { _count: { select: { tasks: { where: { completed: false } } } } },
+    include: listSummaryInclude(user.id),
   });
 
-  return NextResponse.json({ lists: lists.map((l) => toListDTO(l, l._count.tasks)) });
+  return NextResponse.json({ lists: lists.map((l) => toListSummary(l, user.id)) });
 });
 
 export const POST = route(async (req) => {
@@ -25,5 +25,8 @@ export const POST = route(async (req) => {
     data: { ...data, userId: user.id, position: (last._max.position ?? -1) + 1 },
   });
 
-  return NextResponse.json({ list: toListDTO(list) }, { status: 201 });
+  return NextResponse.json(
+    { list: toListDTO(list, { role: "OWNER", ownerName: user.name }) },
+    { status: 201 },
+  );
 });

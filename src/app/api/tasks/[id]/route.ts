@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
-import { fromDateOnly, parseBody, requireUser, route, toTaskDTO } from "@/lib/api";
+import { fromDateOnly, parseBody, requireUser, route, taskInclude, toTaskDTO } from "@/lib/api";
 import { requireListRole, requireTaskRole } from "@/lib/access";
 import { taskUpdateSchema } from "@/lib/validations";
 
@@ -33,7 +33,7 @@ export const PATCH = route<Ctx>(async (req, { params }) => {
     data.position = (last._max.position ?? -1) + 1;
   }
 
-  const updated = await db.task.update({ where: { id: task.id }, data });
+  const updated = await db.task.update({ where: { id: task.id }, data, include: taskInclude });
   return NextResponse.json({ task: toTaskDTO(updated) });
 });
 

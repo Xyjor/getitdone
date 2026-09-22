@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { forbidden, notFound } from "@/lib/api";
+import { forbidden, notFound, taskInclude, toListDTO } from "@/lib/api";
 import type { Prisma } from "@/generated/prisma/client";
 
 /**
@@ -23,6 +23,29 @@ export const hasRole = (role: ListRole, min: ListRole) => RANK[role] >= RANK[min
 export const accessibleListsWhere = (userId: string): Prisma.ListWhereInput => ({
   OR: [{ userId }, { members: { some: { userId } } }],
 });
+
+/**
+ * Include for list queries that need everything the UI shows: the caller's membership (for
+ * their role), the owner's name, and counts of members and open tasks.
+ */
+export const listSummaryInclude = (userId: string) =>
+  ({
+    user: { select: { name: true } },
+    members: { where: { userId }, select: { role: true } },
+    _count: { select: { members: true, tasks: { where: { completed: false } } } },
+  }) satisfies Prisma.ListInclude;
+
+type ListSummaryRow = Prisma.ListGetPayload<{ include: ReturnType<typeof listSummaryInclude> }>;
+
+export function toListSummary(row: ListSummaryRow, userId: string) {
+  const role: ListRole = row.userId === userId ? "OWNER" : (row.members[0]?.role ?? "VIEWER");
+  return toListDTO(row, {
+    role,
+    ownerName: row.user.name,
+    openCount: row._count.tasks,
+    memberCount: row._count.members,
+  });
+}
 
 /** The list plus the user's role on it, or null if they have no access. One query. */
 export async function getListAccess(userId: string, listId: string) {
@@ -50,6 +73,7 @@ export async function requireTaskRole(userId: string, taskId: string, min: ListR
   const task = await db.task.findFirst({
     where: { id: taskId, list: accessibleListsWhere(userId) },
     include: {
+      ...taskInclude,
       list: { select: { userId: true, members: { where: { userId }, select: { role: true } } } },
     },
   });

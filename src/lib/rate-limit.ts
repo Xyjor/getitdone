@@ -67,4 +67,5 @@ export const LIMITS = {
   registerPerIp: { limit: 5, windowSec: 60 * 60 },
   demoPerIp: { limit: 10, windowSec: 60 * 60 },
   sensitivePerUser: { limit: 5, windowSec: 15 * 60 },
+  invitesPerUser: { limit: 20, windowSec: 60 * 60 },
 } satisfies Record<string, Options>;

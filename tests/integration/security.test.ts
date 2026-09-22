@@ -7,7 +7,7 @@ import {
   saveSession,
   TEST_EMAIL_DOMAIN,
   uniqueEmail,
-  useSession,
+  switchToSession,
 } from "./helpers";
 
 vi.mock("next/headers", () => headersMock);
@@ -71,7 +71,7 @@ describe("revocable sessions", () => {
 
     await call(logout.POST, { method: "POST" });
 
-    useSession(stolenCopy); // an attacker replays the old cookie
+    switchToSession(stolenCopy); // an attacker replays the old cookie
     expect(await isLoggedIn()).toBe(false);
   });
 
@@ -79,12 +79,12 @@ describe("revocable sessions", () => {
     const { email, session: laptop } = await signUp();
     const phone = await loginAgain(email);
 
-    useSession(laptop);
+    switchToSession(laptop);
     expect((await call(logoutAll.POST, { method: "POST" })).status).toBe(204);
 
-    useSession(laptop);
+    switchToSession(laptop);
     expect(await isLoggedIn()).toBe(false);
-    useSession(phone);
+    switchToSession(phone);
     expect(await isLoggedIn()).toBe(false);
   });
 
@@ -92,7 +92,7 @@ describe("revocable sessions", () => {
     const { email, session: laptop } = await signUp();
     const phone = await loginAgain(email);
 
-    useSession(laptop);
+    switchToSession(laptop);
     const list = await call<{ sessions: SessionRow[] }>(sessions.GET);
     expect(list.status).toBe(200);
     expect(list.body.sessions).toHaveLength(2);
@@ -102,9 +102,9 @@ describe("revocable sessions", () => {
     const other = list.body.sessions.find((s) => !s.current)!;
     expect((await call(sessionById.DELETE, { method: "DELETE", params: { id: other.id } })).status).toBe(204);
 
-    useSession(phone);
+    switchToSession(phone);
     expect(await isLoggedIn()).toBe(false);
-    useSession(laptop);
+    switchToSession(laptop);
     expect(await isLoggedIn()).toBe(true);
   });
 
@@ -113,15 +113,15 @@ describe("revocable sessions", () => {
     const phone = await loginAgain(email);
     const tablet = await loginAgain(email); // created after the laptop loaded its list
 
-    useSession(laptop);
+    switchToSession(laptop);
     const res = await call<{ revoked: number }>(sessions.DELETE, { method: "DELETE" });
     expect(res.status).toBe(200);
     expect(res.body.revoked).toBe(2);
 
     expect(await isLoggedIn()).toBe(true);
-    useSession(phone);
+    switchToSession(phone);
     expect(await isLoggedIn()).toBe(false);
-    useSession(tablet);
+    switchToSession(tablet);
     expect(await isLoggedIn()).toBe(false);
   });
 
@@ -134,7 +134,7 @@ describe("revocable sessions", () => {
     const res = await call(sessionById.DELETE, { method: "DELETE", params: { id: victimSessionId } });
     expect(res.status).toBe(404);
 
-    useSession(victim);
+    switchToSession(victim);
     expect(await isLoggedIn()).toBe(true);
   });
 
@@ -160,7 +160,7 @@ describe("account", () => {
     const { email, session: laptop } = await signUp();
     const phone = await loginAgain(email);
 
-    useSession(laptop);
+    switchToSession(laptop);
     const res = await call(password.POST, {
       method: "POST",
       body: { currentPassword: PASSWORD, newPassword: "a-brand-new-password" },
@@ -168,7 +168,7 @@ describe("account", () => {
     expect(res.status).toBe(204);
     expect(await isLoggedIn()).toBe(true);
 
-    useSession(phone);
+    switchToSession(phone);
     expect(await isLoggedIn()).toBe(false);
 
     jar.clear();

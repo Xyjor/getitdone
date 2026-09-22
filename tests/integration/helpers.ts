@@ -28,7 +28,7 @@ export const randomIp = () =>
 export const saveSession = () => new Map(jar);
 
 /** Switches to a previously saved session. */
-export function useSession(session: Map<string, string>) {
+export function switchToSession(session: Map<string, string>) {
   jar.clear();
   session.forEach((v, k) => jar.set(k, v));
 }

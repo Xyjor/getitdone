@@ -105,11 +105,18 @@ export const taskQuerySchema = z.object({
   today: dateOnly.optional(),
 });
 
+export const MEMBER_ROLES = ["EDITOR", "VIEWER"] as const;
+export type MemberRoleValue = (typeof MEMBER_ROLES)[number];
+
+export const inviteSchema = z.object({ email, role: z.enum(MEMBER_ROLES) });
+export const memberRoleSchema = z.object({ role: z.enum(MEMBER_ROLES) });
+
 export const reorderSchema = z.object({
   listId: z.string().min(1),
   orderedIds: z.array(z.string().min(1)).min(1).max(1000),
 });
 
+export type InviteInput = z.infer<typeof inviteSchema>;
 export type PasswordChangeInput = z.infer<typeof passwordChangeSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;

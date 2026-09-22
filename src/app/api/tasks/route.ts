@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
-import { fromDateOnly, parseBody, requireUser, route, toTaskDTO } from "@/lib/api";
+import { fromDateOnly, parseBody, requireUser, route, taskInclude, toTaskDTO } from "@/lib/api";
 import { accessibleListsWhere, requireListRole } from "@/lib/access";
 import { taskCreateSchema, taskQuerySchema } from "@/lib/validations";
 
@@ -43,7 +43,7 @@ export const GET = route(async (req) => {
       orderBy = [{ completed: "asc" }, { position: "asc" }, { createdAt: "asc" }];
   }
 
-  const tasks = await db.task.findMany({ where, orderBy, take: 500 });
+  const tasks = await db.task.findMany({ where, orderBy, take: 500, include: taskInclude });
   return NextResponse.json({ tasks: tasks.map(toTaskDTO) });
 });
 
@@ -66,6 +66,7 @@ export const POST = route(async (req) => {
       position: (last._max.position ?? -1) + 1,
       createdById: user.id,
     },
+    include: taskInclude,
   });
 
   return NextResponse.json({ task: toTaskDTO(task) }, { status: 201 });

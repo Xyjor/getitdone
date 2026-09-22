@@ -59,6 +59,7 @@ export function useCreateTask() {
         priority: input.priority ?? "MEDIUM",
         position: Number.MAX_SAFE_INTEGER,
         listId: input.listId,
+        createdByName: null,
         createdAt: now,
         updatedAt: now,
       };
