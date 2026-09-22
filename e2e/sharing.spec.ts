@@ -63,7 +63,9 @@ test("share a list: invite, accept, collaborate, then downgrade to view-only", a
 
   // Alice makes Bob a viewer; Bob's editing controls disappear.
   await alice.getByRole("button", { name: /Share/ }).click();
-  await alice.getByRole("combobox", { name: "Role for Bob Builder" }).click();
+  const roleSelect = alice.getByRole("combobox", { name: "Role for Bob Builder" });
+  await roleSelect.scrollIntoViewIfNeeded();
+  await roleSelect.click();
   await alice.getByRole("option", { name: "Can view" }).click();
   await expect(alice.getByText("Role updated")).toBeVisible();
   await alice.keyboard.press("Escape");
