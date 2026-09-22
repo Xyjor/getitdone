@@ -71,7 +71,12 @@ flowchart LR
 - **Invites go to existing accounts only.** Sign-up doesn't verify email ownership (that would need an email service), so an invite waiting for a future sign-up could be claimed by whoever registers that address first. Telling the owner "no account uses this email" reveals nothing new, because sign-up already reports taken emails. Invites expire after 14 days, a list holds at most 20 people, invites are rate-limited, and demo accounts can't invite real accounts.
 - **Only the owner sees email addresses.** Collaborators see each other's names only.
 - **Live updates without paid services:** shared lists poll every 10 seconds (views that include shared lists poll every 30). Polling pauses while the tab is hidden, while a change is still saving, and after 5 minutes without input, so idle tabs let the database scale to zero.
-- **Zero-downtime migration:** tasks gained a `createdById` column next to the old `userId` (expand/contract) instead of renaming it. The previously deployed version keeps working during a deploy, and rollbacks stay possible. The old column is removed in a later migration.
+- **Zero-downtime migration (expand/contract):** instead of renaming `Task.userId`, the change shipped in three releases:
+  1. Add `createdById`, backfill it, and write both columns.
+  2. Stop writing `userId`.
+  3. Backfill any gaps and drop `userId`.
+
+  At every step, the version already live kept working while the next one built, and a rollback stayed possible.
 
 ### Security decisions
 
