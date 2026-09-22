@@ -30,7 +30,6 @@ model User {
 
   lists        List[]       @relation("ListOwner")
   createdTasks Task[]       @relation("TaskCreator")
-  legacyTasks  Task[]       @relation("TaskLegacyUser")
   memberships  ListMember[]
   sentInvites  ListInvite[]
   sessions     Session[]
@@ -124,13 +123,6 @@ model Task {
   createdById String?
   createdBy   User?   @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
 
-  /// DEPRECATED: the old "userId" column (expand/contract migration). No longer written or
-  /// read; still present so the previously deployed version keeps working during this deploy.
-  /// Dropped in the next migration.
-  legacyUserId String? @map("userId")
-  legacyUser   User?   @relation("TaskLegacyUser", fields: [legacyUserId], references: [id], onDelete: SetNull)
-
   @@index([createdById])
-  @@index([legacyUserId])
   @@index([listId, position])
 }
