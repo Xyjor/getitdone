@@ -1,23 +1,27 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { notFound, parseBody, requireUser, route, toListDTO } from "@/lib/api";
+import { parseBody, requireUser, route } from "@/lib/api";
+import { listSummaryInclude, requireListRole, toListSummary } from "@/lib/access";
 import { listUpdateSchema } from "@/lib/validations";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// Lookups always filter by userId as well as id, so another user's list is simply "not found".
+// Access rules live in src/lib/access.ts: no access -> 404, too low a role -> 403.
+
+async function summary(listId: string, userId: string) {
+  const row = await db.list.findUniqueOrThrow({
+    where: { id: listId },
+    include: listSummaryInclude(userId),
+  });
+  return toListSummary(row, userId);
+}
 
 export const GET = route<Ctx>(async (_req, { params }) => {
   const user = await requireUser();
   const { id } = await params;
 
-  const list = await db.list.findFirst({
-    where: { id, userId: user.id },
-    include: { _count: { select: { tasks: { where: { completed: false } } } } },
-  });
-  if (!list) throw notFound("List");
-
-  return NextResponse.json({ list: toListDTO(list, list._count.tasks) });
+  await requireListRole(user.id, id, "VIEWER");
+  return NextResponse.json({ list: await summary(id, user.id) });
 });
 
 export const PATCH = route<Ctx>(async (req, { params }) => {
@@ -25,20 +29,17 @@ export const PATCH = route<Ctx>(async (req, { params }) => {
   const { id } = await params;
   const data = await parseBody(req, listUpdateSchema);
 
-  const { count } = await db.list.updateMany({ where: { id, userId: user.id }, data });
-  if (count === 0) throw notFound("List");
-
-  const list = await db.list.findUniqueOrThrow({ where: { id } });
-  return NextResponse.json({ list: toListDTO(list) });
+  await requireListRole(user.id, id, "OWNER");
+  await db.list.update({ where: { id }, data });
+  return NextResponse.json({ list: await summary(id, user.id) });
 });
 
 export const DELETE = route<Ctx>(async (_req, { params }) => {
   const user = await requireUser();
   const { id } = await params;
 
-  // Tasks in the list are removed by the ON DELETE CASCADE foreign key.
-  const { count } = await db.list.deleteMany({ where: { id, userId: user.id } });
-  if (count === 0) throw notFound("List");
-
+  await requireListRole(user.id, id, "OWNER");
+  // Tasks, members and invites are removed by ON DELETE CASCADE.
+  await db.list.delete({ where: { id } });
   return new Response(null, { status: 204 });
 });

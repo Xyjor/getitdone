@@ -6,14 +6,30 @@ import { api, localToday } from "@/lib/api-client";
 import type { TaskDTO } from "@/lib/types";
 import type { TaskCreateInput, TaskUpdateInput, TaskView } from "@/lib/validations";
 import { listsKey } from "./use-lists";
+import { useUserActive } from "./use-user-active";
 
 export type TaskFilter = { listId?: string; view: TaskView; q?: string };
 
 export const tasksKey = (filter: TaskFilter) => ["tasks", filter] as const;
 
-export function useTasks(filter: TaskFilter) {
+/** All task mutations share this key, so polling can wait while any of them is in flight. */
+const taskMutationKey = ["tasks"] as const;
+
+/**
+ * @param live poll for collaborators' changes: every 10s on a shared list, every 30s in views
+ * that merely include shared lists. Polling (rather than websockets) keeps hosting free. It
+ * pauses while the tab is hidden, while the user is idle, and while a change is still saving
+ * (so a refetch can't briefly undo an optimistic update).
+ */
+export function useTasks(filter: TaskFilter, { live = false }: { live?: boolean } = {}) {
+  const qc = useQueryClient();
+  const active = useUserActive();
+  const interval = filter.listId ? 10_000 : 30_000;
   return useQuery({
     queryKey: tasksKey(filter),
+    refetchInterval: () =>
+      live && active && qc.isMutating({ mutationKey: taskMutationKey }) === 0 ? interval : false,
+    refetchIntervalInBackground: false,
     queryFn: () => {
       const params = new URLSearchParams({ view: filter.view, today: localToday() });
       if (filter.listId) params.set("listId", filter.listId);
@@ -45,6 +61,7 @@ function refresh(qc: QueryClient) {
 export function useCreateTask() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: taskMutationKey,
     mutationFn: (input: TaskCreateInput) =>
       api<{ task: TaskDTO }>("/api/tasks", { method: "POST", body: input }).then((r) => r.task),
     onMutate: async (input) => {
@@ -59,13 +76,15 @@ export function useCreateTask() {
         priority: input.priority ?? "MEDIUM",
         position: Number.MAX_SAFE_INTEGER,
         listId: input.listId,
+        createdByName: null,
         createdAt: now,
         updatedAt: now,
       };
       // Show the new task right away in the list it was added to.
       qc.setQueriesData<TaskDTO[]>(
         { queryKey: ["tasks"], predicate: (q) => matchesList(q.queryKey, input.listId) },
-        (old) => (old ? [...old.filter((t) => !t.completed), temp, ...old.filter((t) => t.completed)] : old),
+        (old) =>
+          old ? [...old.filter((t) => !t.completed), temp, ...old.filter((t) => t.completed)] : old,
       );
       return { snap };
     },
@@ -85,6 +104,7 @@ function matchesList(key: readonly unknown[], listId: string) {
 export function useUpdateTask() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: taskMutationKey,
     mutationFn: ({ id, ...input }: TaskUpdateInput & { id: string }) =>
       api<{ task: TaskDTO }>(`/api/tasks/${id}`, { method: "PATCH", body: input }).then(
         (r) => r.task,
@@ -107,10 +127,13 @@ export function useUpdateTask() {
 export function useDeleteTask() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: taskMutationKey,
     mutationFn: (id: string) => api(`/api/tasks/${id}`, { method: "DELETE" }),
     onMutate: async (id) => {
       const snap = await snapshot(qc);
-      qc.setQueriesData<TaskDTO[]>({ queryKey: ["tasks"] }, (old) => old?.filter((t) => t.id !== id));
+      qc.setQueriesData<TaskDTO[]>({ queryKey: ["tasks"] }, (old) =>
+        old?.filter((t) => t.id !== id),
+      );
       return { snap };
     },
     onSuccess: () => toast.success("Task deleted"),
@@ -126,6 +149,7 @@ export function useReorderTasks(listId: string) {
   const qc = useQueryClient();
   const key = tasksKey({ listId, view: "all" });
   return useMutation({
+    mutationKey: taskMutationKey,
     mutationFn: (orderedIds: string[]) =>
       api("/api/tasks/reorder", { method: "POST", body: { listId, orderedIds } }),
     onMutate: async (orderedIds) => {
@@ -143,6 +167,6 @@ export function useReorderTasks(listId: string) {
       rollback(qc, ctx?.snap);
       toast.error("Couldn't save the new order");
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
+    onSettled: () => refresh(qc),
   });
 }

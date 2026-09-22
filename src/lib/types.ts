@@ -1,4 +1,4 @@
-import type { ListColor, PriorityValue } from "./validations";
+import type { ListColor, MemberRoleValue, PriorityValue } from "./validations";
 
 // JSON shapes returned by the API. Safe to import from client components.
 
@@ -20,6 +20,31 @@ export type ListDTO = {
   position: number;
   /** Number of tasks in the list that are not completed yet. */
   openCount: number;
+  /** The current user's role on this list. */
+  role: ListRoleValue;
+  ownerName: string;
+  /** People the list is shared with (not counting the owner). */
+  memberCount: number;
+  /** Invitations the owner has sent that haven't been accepted yet (0 for non-owners). */
+  pendingInviteCount: number;
+};
+
+export type ListRoleValue = "OWNER" | MemberRoleValue;
+
+/** `email` is only included for the list owner. */
+export type MemberDTO = { userId: string; name: string; email?: string; role: ListRoleValue };
+
+/** A pending invite, as seen by the list owner. */
+export type ListInviteDTO = { id: string; email: string; role: MemberRoleValue; expiresAt: string };
+
+/** An invite addressed to the current user. */
+export type InviteDTO = {
+  id: string;
+  listId: string;
+  listName: string;
+  listColor: ListColor;
+  role: MemberRoleValue;
+  invitedByName: string;
 };
 
 export type TaskDTO = {
@@ -32,6 +57,8 @@ export type TaskDTO = {
   priority: PriorityValue;
   position: number;
   listId: string;
+  /** Who added the task (null if their account was deleted). */
+  createdByName: string | null;
   createdAt: string;
   updatedAt: string;
 };

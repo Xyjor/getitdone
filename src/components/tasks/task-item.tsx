@@ -1,7 +1,16 @@
 "use client";
 
 import { forwardRef, useState } from "react";
-import { CalendarIcon, Flag, GripVertical, MoreHorizontal, Pencil, StickyNote, Trash2 } from "lucide-react";
+import {
+  CalendarIcon,
+  Flag,
+  GripVertical,
+  MoreHorizontal,
+  Pencil,
+  StickyNote,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -28,6 +37,10 @@ type Props = {
   list?: ListDTO;
   showList?: boolean;
   today: string;
+  /** Viewer role: the task can be seen but not changed. */
+  readOnly?: boolean;
+  /** Show who added the task (used in shared lists). */
+  showCreator?: boolean;
   /** Props for the drag handle when the row is sortable. */
   dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>;
   isDragging?: boolean;
@@ -35,7 +48,7 @@ type Props = {
 };
 
 export const TaskItem = forwardRef<HTMLLIElement, Props>(function TaskItem(
-  { task, list, showList, today, dragHandleProps, isDragging, style },
+  { task, list, showList, today, readOnly, showCreator, dragHandleProps, isDragging, style },
   ref,
 ) {
   const [editOpen, setEditOpen] = useState(false);
@@ -67,9 +80,11 @@ export const TaskItem = forwardRef<HTMLLIElement, Props>(function TaskItem(
 
       <Checkbox
         checked={task.completed}
-        disabled={saving}
+        disabled={saving || readOnly}
         onCheckedChange={(checked) => update.mutate({ id: task.id, completed: checked === true })}
-        aria-label={task.completed ? `Mark "${task.title}" as not done` : `Mark "${task.title}" as done`}
+        aria-label={
+          task.completed ? `Mark "${task.title}" as not done` : `Mark "${task.title}" as done`
+        }
         className="mt-0.5 size-5 rounded-full"
       />
 
@@ -88,16 +103,30 @@ export const TaskItem = forwardRef<HTMLLIElement, Props>(function TaskItem(
           {task.title}
         </span>
 
-        {(due || task.priority !== "MEDIUM" || task.notes || (showList && list)) && (
+        {(due ||
+          task.priority !== "MEDIUM" ||
+          task.notes ||
+          (showList && list) ||
+          (showCreator && task.createdByName)) && (
           <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             {due && (
-              <span className={cn("inline-flex items-center gap-1", !task.completed && DUE_TONE_CLASSES[due.tone])}>
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1",
+                  !task.completed && DUE_TONE_CLASSES[due.tone],
+                )}
+              >
                 <CalendarIcon className="size-3" />
                 {due.label}
               </span>
             )}
             {task.priority !== "MEDIUM" && (
-              <span className={cn("inline-flex items-center gap-1", PRIORITY_META[task.priority].className)}>
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1",
+                  PRIORITY_META[task.priority].className,
+                )}
+              >
                 <Flag className="size-3" />
                 {PRIORITY_META[task.priority].label}
               </span>
@@ -106,6 +135,15 @@ export const TaskItem = forwardRef<HTMLLIElement, Props>(function TaskItem(
               <span className="inline-flex items-center gap-1">
                 <StickyNote className="size-3" />
                 <span className="sr-only">Has notes</span>
+              </span>
+            )}
+            {showCreator && task.createdByName && (
+              <span
+                className="inline-flex items-center gap-1"
+                title={`Added by ${task.createdByName}`}
+              >
+                <UserRound className="size-3" />
+                {task.createdByName}
               </span>
             )}
             {showList && list && (
@@ -118,29 +156,32 @@ export const TaskItem = forwardRef<HTMLLIElement, Props>(function TaskItem(
         )}
       </button>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            disabled={saving}
-            className="opacity-0 group-hover/task:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100"
-            aria-label={`Options for "${task.title}"`}
-          >
-            <MoreHorizontal />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setEditOpen(true)}>
-            <Pencil /> Edit
-          </DropdownMenuItem>
-          <DropdownMenuItem variant="destructive" onSelect={() => remove.mutate(task.id)}>
-            <Trash2 /> Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <TaskDialog task={task} open={editOpen} onOpenChange={setEditOpen} />
+      {!readOnly && (
+        <>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                disabled={saving}
+                className="opacity-0 group-hover/task:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100"
+                aria-label={`Options for "${task.title}"`}
+              >
+                <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+                <Pencil /> Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem variant="destructive" onSelect={() => remove.mutate(task.id)}>
+                <Trash2 /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </>
+      )}
+      <TaskDialog task={task} open={editOpen} onOpenChange={setEditOpen} readOnly={readOnly} />
     </li>
   );
 });

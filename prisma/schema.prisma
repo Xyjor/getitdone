@@ -13,6 +13,12 @@ enum Priority {
   HIGH
 }
 
+/// Roles for people a list is shared with. The owner is List.userId and has no member row.
+enum MemberRole {
+  EDITOR
+  VIEWER
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -22,9 +28,12 @@ model User {
   isDemo       Boolean  @default(false)
   createdAt    DateTime @default(now())
 
-  lists    List[]
-  tasks    Task[]
-  sessions Session[]
+  lists        List[]       @relation("ListOwner")
+  createdTasks Task[]       @relation("TaskCreator")
+  legacyTasks  Task[]       @relation("TaskLegacyUser")
+  memberships  ListMember[]
+  sentInvites  ListInvite[]
+  sessions     Session[]
 }
 
 /// One signed-in browser/device. A session JWT is only valid while its row exists,
@@ -56,11 +65,45 @@ model List {
   position  Int      @default(0)
   createdAt DateTime @default(now())
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tasks  Task[]
+  /// The owner. Deleting the owner deletes the list (and its tasks, members and invites).
+  userId  String
+  user    User         @relation("ListOwner", fields: [userId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+  members ListMember[]
+  invites ListInvite[]
 
   @@index([userId, position])
+}
+
+/// Someone a list is shared with.
+model ListMember {
+  id        String     @id @default(cuid())
+  listId    String
+  list      List       @relation(fields: [listId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      MemberRole
+  createdAt DateTime   @default(now())
+
+  @@unique([listId, userId])
+  @@index([userId])
+}
+
+/// A pending invitation, matched to users by email (no email is sent; it appears in the app).
+model ListInvite {
+  id          String     @id @default(cuid())
+  listId      String
+  list        List       @relation(fields: [listId], references: [id], onDelete: Cascade)
+  /// Normalized (trimmed, lowercase), same rules as sign-up.
+  email       String
+  role        MemberRole
+  invitedById String
+  invitedBy   User       @relation(fields: [invitedById], references: [id], onDelete: Cascade)
+  createdAt   DateTime   @default(now())
+  expiresAt   DateTime
+
+  @@unique([listId, email])
+  @@index([email])
 }
 
 model Task {
@@ -74,11 +117,20 @@ model Task {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  listId String
-  list   List   @relation(fields: [listId], references: [id], onDelete: Cascade)
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listId      String
+  list        List    @relation(fields: [listId], references: [id], onDelete: Cascade)
+  /// Who added the task. Access comes from the list, not from this. Kept (as null) if that
+  /// person deletes their account, so their tasks don't vanish from lists shared with them.
+  createdById String?
+  createdBy   User?   @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
 
-  @@index([userId])
+  /// DEPRECATED: the old "userId" column, kept only so the previously deployed version keeps
+  /// working during a deploy (expand/contract migration). Written alongside createdById;
+  /// never read. Dropped in a follow-up migration once this release is live.
+  legacyUserId String? @map("userId")
+  legacyUser   User?   @relation("TaskLegacyUser", fields: [legacyUserId], references: [id], onDelete: SetNull)
+
+  @@index([createdById])
+  @@index([legacyUserId])
   @@index([listId, position])
 }

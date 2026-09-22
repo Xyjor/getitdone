@@ -12,11 +12,16 @@ A full-stack task manager: sign up, organize tasks into lists, set due dates and
 | --- | --- | --- |
 | ![Today view](docs/screenshots/today-dark.png) | ![List view](docs/screenshots/list-light.png) | ![Mobile view](docs/screenshots/mobile-dark.png) |
 
+| A list shared with you | Sharing a list |
+| --- | --- |
+| ![Shared list](docs/screenshots/shared-list-dark.png) | ![Share dialog](docs/screenshots/share-dialog-dark.png) |
+
 ## Features
 
 - **Authentication:** sign up, log in, log out. Sessions are signed JWTs in `httpOnly` cookies, and passwords are hashed with bcrypt.
 - **Revocable sessions and account settings:** see every signed-in device, sign out any of them, log out everywhere, change your password (other devices are signed out), and delete your account.
 - **Rate limiting:** brute-force protection on login, sign-up and the demo, stored in Postgres (no paid service).
+- **Shared lists with roles:** invite people by email as **Editor** or **Viewer**. Collaborators' changes appear within seconds, tasks show who added them, and members can leave. The demo includes a list shared by "Sam (demo)" and a pending invitation.
 - **Lists and tasks (full CRUD):** create, rename, recolor and delete lists. Tasks have titles, notes, due dates and priorities, and can move between lists.
 - **Smart views:** Today (including overdue), Upcoming (grouped by day), Completed, and search across all tasks.
 - **Drag-and-drop reordering** with mouse, touch or keyboard (dnd-kit).
@@ -52,6 +57,22 @@ flowchart LR
   O -- SQL --> D[(PostgreSQL<br/>Neon)]
 ```
 
+### Sharing and roles
+
+| Action | Owner | Editor | Viewer | Anyone else |
+| --- | --- | --- | --- | --- |
+| See the list and its tasks | ✅ | ✅ | ✅ | 404 |
+| Add, edit, complete, delete, reorder tasks | ✅ | ✅ | 403 | 404 |
+| Rename, recolor or delete the list | ✅ | 403 | 403 | 404 |
+| Invite people, change roles, remove members | ✅ | 403 | 403 | 404 |
+| Leave the list | — | ✅ | ✅ | 404 |
+
+- **One access layer** (`src/lib/access.ts`): every list and task route goes through `requireListRole` / `requireTaskRole`. Someone with no access always gets **404**, so the API never reveals that a list exists. Members whose role is too low get **403**. A table-driven integration test checks every action against every role.
+- **Invites go to existing accounts only.** Sign-up doesn't verify email ownership (that would need an email service), so an invite waiting for a future sign-up could be claimed by whoever registers that address first. Telling the owner "no account uses this email" reveals nothing new, because sign-up already reports taken emails. Invites expire after 14 days, a list holds at most 20 people, invites are rate-limited, and demo accounts can't invite real accounts.
+- **Only the owner sees email addresses.** Collaborators see each other's names only.
+- **Live updates without paid services:** shared lists poll every 10 seconds (views that include shared lists poll every 30). Polling pauses while the tab is hidden, while a change is still saving, and after 5 minutes without input, so idle tabs let the database scale to zero.
+- **Zero-downtime migration:** tasks gained a `createdById` column next to the old `userId` (expand/contract) instead of renaming it. The previously deployed version keeps working during a deploy, and rollbacks stay possible. The old column is removed in a later migration.
+
 ### Security decisions
 
 - **Token storage:** the JWT lives in an `httpOnly`, `Secure`, `SameSite=Lax` cookie, so page scripts can't read it (unlike `localStorage`).
@@ -79,6 +100,12 @@ flowchart LR
 | `POST` | `/api/account/password` | Change password (signs out other devices) |
 | `GET` | `/api/account/sessions` | Signed-in devices |
 | `DELETE` | `/api/account/sessions/:id` | Sign out one device |
+| `GET` | `/api/lists/:id/members` | Owner and members (owner also gets emails and pending invites) |
+| `POST` | `/api/lists/:id/invites` | Invite an existing account `{ email, role }` (owner) |
+| `DELETE` | `/api/lists/:id/invites/:inviteId` | Revoke an invite (owner) |
+| `PATCH` / `DELETE` | `/api/lists/:id/members/:userId` | Change a role (owner) / remove a member, or leave |
+| `GET` | `/api/invites` | Invitations addressed to me |
+| `POST` | `/api/invites/:id/accept` · `/decline` | Respond to an invitation |
 | `GET` | `/api/cron/cleanup` | Daily cleanup of expired sessions, stale rate-limit rows and old demo accounts (Vercel Cron, `CRON_SECRET`) |
 | `GET` / `POST` | `/api/lists` | List all lists (with open-task counts) / create a list |
 | `GET` / `PATCH` / `DELETE` | `/api/lists/:id` | Read / update / delete a list (deleting a list deletes its tasks) |
@@ -118,8 +145,8 @@ If you're using Docker instead of Neon, start the local database with `npm run d
 ## Testing
 
 - **Unit tests:** validation rules, JWT signing and verification (tampering, wrong secret, expiry), password hashing, date formatting, redirect safety.
-- **API integration tests:** run the real route handlers against a real database, covering auth flows, CRUD, filters, reordering, cross-origin blocking, **data isolation between users**, session revocation (a replayed token after logout is rejected), password changes, account deletion, rate limiting and the cleanup cron.
-- **End-to-end tests:** sign up → create a list → add, complete, edit and delete tasks → reload → log out → log back in, plus the demo flow, signing out another device from Settings, password change and login lockout. They run on both desktop and mobile viewports.
+- **API integration tests:** run the real route handlers against a real database, covering auth flows, CRUD, filters, reordering, cross-origin blocking, **data isolation between users**, session revocation (a replayed token after logout is rejected), password changes, account deletion, rate limiting, the cleanup cron, and a **permission matrix** covering every sharing action for owner, editor, viewer and outsider. It also checks cross-list ID tampering, invitations and membership changes.
+- **End-to-end tests:** sign up → create a list → add, complete, edit and delete tasks → reload → log out → log back in, plus the demo flow, signing out another device from Settings, password change, login lockout, and a two-browser sharing flow (invite → accept → collaborate → downgrade to view-only). They run on both desktop and mobile viewports.
 
 CI runs everything on each push against a throwaway Postgres container.
 

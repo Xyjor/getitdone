@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
-import { ApiError, notFound, parseBody, requireUser, route } from "@/lib/api";
+import { ApiError, parseBody, requireUser, route } from "@/lib/api";
+import { requireListRole } from "@/lib/access";
 import { reorderSchema } from "@/lib/validations";
 
 /**
@@ -14,13 +15,10 @@ export const POST = route(async (req) => {
     throw new ApiError(400, "orderedIds must not contain duplicates");
   }
 
-  const list = await db.list.findFirst({ where: { id: listId, userId: user.id } });
-  if (!list) throw notFound("List");
+  await requireListRole(user.id, listId, "EDITOR");
 
-  const owned = await db.task.count({
-    where: { id: { in: orderedIds }, listId, userId: user.id },
-  });
-  if (owned !== orderedIds.length) {
+  const inList = await db.task.count({ where: { id: { in: orderedIds }, listId } });
+  if (inList !== orderedIds.length) {
     throw new ApiError(400, "Some tasks do not belong to this list");
   }
 

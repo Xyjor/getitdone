@@ -10,7 +10,9 @@ import { ApiError } from "@/lib/api";
  * (and, unlike a plain hash, they can't be reversed by trying every IPv4 address).
  */
 export const hashKey = (key: string) =>
-  createHmac("sha256", process.env.JWT_SECRET ?? "").update(key).digest("hex");
+  createHmac("sha256", process.env.JWT_SECRET ?? "")
+    .update(key)
+    .digest("hex");
 
 type Options = { limit: number; windowSec: number; message?: string };
 
@@ -67,4 +69,5 @@ export const LIMITS = {
   registerPerIp: { limit: 5, windowSec: 60 * 60 },
   demoPerIp: { limit: 10, windowSec: 60 * 60 },
   sensitivePerUser: { limit: 5, windowSec: 15 * 60 },
+  invitesPerUser: { limit: 20, windowSec: 60 * 60 },
 } satisfies Record<string, Options>;

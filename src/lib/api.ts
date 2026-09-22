@@ -66,7 +66,12 @@ export function route<C>(handler: Handler<C>): Handler<C> {
           fieldErrors as Record<string, string[]>,
         );
       }
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025") {
+      // P2025: record not found. P2003: a related record vanished mid-request (e.g. a list
+      // deleted while someone was accepting an invite to it).
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        ["P2025", "P2003"].includes(err.code)
+      ) {
         return errorResponse(404, "Resource not found");
       }
       console.error(err);
@@ -83,7 +88,10 @@ export async function requireUser() {
 }
 
 /** Parses and validates a JSON body. */
-export async function parseBody<S extends z.ZodType>(req: Request, schema: S): Promise<z.output<S>> {
+export async function parseBody<S extends z.ZodType>(
+  req: Request,
+  schema: S,
+): Promise<z.output<S>> {
   let json: unknown;
   try {
     json = await req.json();
@@ -105,7 +113,10 @@ export function fromDateOnly(value: string | null | undefined): Date | null | un
   return value === null ? null : new Date(`${value}T00:00:00.000Z`);
 }
 
-type TaskRow = Prisma.TaskGetPayload<object>;
+/** Include this in task queries so toTaskDTO can show who added the task. */
+export const taskInclude = { createdBy: { select: { name: true } } } as const;
+
+type TaskRow = Prisma.TaskGetPayload<{ include: typeof taskInclude }>;
 
 export function toTaskDTO(t: TaskRow): TaskDTO {
   return {
@@ -117,6 +128,7 @@ export function toTaskDTO(t: TaskRow): TaskDTO {
     priority: t.priority,
     position: t.position,
     listId: t.listId,
+    createdByName: t.createdBy?.name ?? null,
     createdAt: t.createdAt.toISOString(),
     updatedAt: t.updatedAt.toISOString(),
   };
@@ -124,12 +136,19 @@ export function toTaskDTO(t: TaskRow): TaskDTO {
 
 type ListRow = Prisma.ListGetPayload<object>;
 
-export function toListDTO(l: ListRow, openCount = 0): ListDTO {
+type ListExtras = Pick<ListDTO, "role" | "ownerName"> &
+  Partial<Pick<ListDTO, "openCount" | "memberCount" | "pendingInviteCount">>;
+
+export function toListDTO(l: ListRow, extras: ListExtras): ListDTO {
   return {
     id: l.id,
     name: l.name,
     color: l.color as ListColor,
     position: l.position,
-    openCount,
+    openCount: extras.openCount ?? 0,
+    role: extras.role,
+    ownerName: extras.ownerName,
+    memberCount: extras.memberCount ?? 0,
+    pendingInviteCount: extras.pendingInviteCount ?? 0,
   };
 }

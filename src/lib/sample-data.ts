@@ -26,7 +26,12 @@ const SAMPLE_LISTS: { name: string; color: string; tasks: SampleTask[] }[] = [
     name: "Work",
     color: "blue",
     tasks: [
-      { title: "Prepare sprint demo", notes: "Show the new drag-and-drop flow.", due: 0, priority: "HIGH" },
+      {
+        title: "Prepare sprint demo",
+        notes: "Show the new drag-and-drop flow.",
+        due: 0,
+        priority: "HIGH",
+      },
       { title: "Review pull requests", due: 0 },
       { title: "Write API documentation", due: 2, priority: "MEDIUM" },
       { title: "1:1 with manager", due: 3, priority: "LOW" },
@@ -59,7 +64,11 @@ const SAMPLE_LISTS: { name: string; color: string; tasks: SampleTask[] }[] = [
     color: "violet",
     tasks: [
       { title: "Finish TypeScript generics chapter", due: 5 },
-      { title: "Build a side project with Next.js", notes: "You're looking at it!", completed: true },
+      {
+        title: "Build a side project with Next.js",
+        notes: "You're looking at it!",
+        completed: true,
+      },
     ],
   },
 ];
@@ -67,7 +76,12 @@ const SAMPLE_LISTS: { name: string; color: string; tasks: SampleTask[] }[] = [
 /** Creates a few example lists and tasks for a user (two queries, so it's fast on remote DBs). */
 export async function createSampleData(db: Db, userId: string) {
   const lists = await db.list.createManyAndReturn({
-    data: SAMPLE_LISTS.map((list, position) => ({ name: list.name, color: list.color, position, userId })),
+    data: SAMPLE_LISTS.map((list, position) => ({
+      name: list.name,
+      color: list.color,
+      position,
+      userId,
+    })),
     select: { id: true, position: true },
   });
   const listIdAt = new Map(lists.map((l) => [l.position, l.id]));
@@ -82,8 +96,79 @@ export async function createSampleData(db: Db, userId: string) {
         dueDate: t.due === undefined ? null : daysFromToday(t.due),
         position: i,
         listId: listIdAt.get(listIndex)!,
-        userId,
+        createdById: userId,
+        legacyUserId: userId,
       })),
     ),
+  });
+}
+
+/**
+ * Demo-only: a companion account ("Sam") who has shared a list with the visitor and sent them
+ * an invitation, so the sharing features are visible the moment the demo opens.
+ */
+export async function createSharedSampleData(
+  db: Db,
+  visitor: { id: string; email: string },
+  companion: { email: string; passwordHash: string },
+) {
+  const sam = await db.user.create({
+    data: {
+      name: "Sam (demo)",
+      email: companion.email,
+      passwordHash: companion.passwordHash,
+      isDemo: true,
+    },
+    select: { id: true },
+  });
+
+  const [launch, bbq] = await db.list.createManyAndReturn({
+    data: [
+      { name: "Team launch 🚀", color: "pink", position: 0, userId: sam.id },
+      { name: "Weekend BBQ", color: "orange", position: 1, userId: sam.id },
+    ],
+    select: { id: true },
+  });
+
+  await db.listMember.create({ data: { listId: launch!.id, userId: visitor.id, role: "EDITOR" } });
+  await db.listInvite.create({
+    data: {
+      listId: bbq!.id,
+      email: visitor.email,
+      role: "VIEWER",
+      invitedById: sam.id,
+      expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+    },
+  });
+
+  const task = (
+    title: string,
+    createdById: string,
+    i: number,
+    extra: Partial<SampleTask> = {},
+  ) => ({
+    title,
+    listId: launch!.id,
+    createdById,
+    legacyUserId: createdById,
+    position: i,
+    priority: extra.priority ?? "MEDIUM",
+    completed: extra.completed ?? false,
+    dueDate: extra.due === undefined ? null : daysFromToday(extra.due),
+    notes: extra.notes ?? null,
+  });
+
+  await db.task.createMany({
+    data: [
+      task("Finalize launch checklist", sam.id, 0, { due: 0, priority: "HIGH" }),
+      task("Record the product demo video", visitor.id, 1, {
+        due: 2,
+        notes: "Keep it under 2 minutes.",
+      }),
+      task("Draft the announcement email", sam.id, 2, { due: 1 }),
+      task("Book the launch venue", sam.id, 3, { completed: true }),
+      { ...task("Burgers and veggie patties", sam.id, 0), listId: bbq!.id },
+      { ...task("Borrow a second grill", sam.id, 1, { due: 4 }), listId: bbq!.id },
+    ],
   });
 }

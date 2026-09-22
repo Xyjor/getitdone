@@ -1,14 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
-import {
-  fromDateOnly,
-  notFound,
-  parseBody,
-  requireUser,
-  route,
-  toTaskDTO,
-} from "@/lib/api";
+import { fromDateOnly, parseBody, requireUser, route, taskInclude, toTaskDTO } from "@/lib/api";
+import { accessibleListsWhere, requireListRole } from "@/lib/access";
 import { taskCreateSchema, taskQuerySchema } from "@/lib/validations";
 
 /**
@@ -21,7 +15,8 @@ export const GET = route(async (req) => {
 
   const todayDate = fromDateOnly(today ?? new Date().toISOString().slice(0, 10))!;
 
-  const where: Prisma.TaskWhereInput = { userId: user.id };
+  // Tasks in every list the user can see: their own lists and lists shared with them.
+  const where: Prisma.TaskWhereInput = { list: accessibleListsWhere(user.id) };
   if (listId) where.listId = listId;
   if (q) {
     where.OR = [
@@ -48,7 +43,7 @@ export const GET = route(async (req) => {
       orderBy = [{ completed: "asc" }, { position: "asc" }, { createdAt: "asc" }];
   }
 
-  const tasks = await db.task.findMany({ where, orderBy, take: 500 });
+  const tasks = await db.task.findMany({ where, orderBy, take: 500, include: taskInclude });
   return NextResponse.json({ tasks: tasks.map(toTaskDTO) });
 });
 
@@ -56,8 +51,7 @@ export const POST = route(async (req) => {
   const user = await requireUser();
   const { dueDate, notes, ...data } = await parseBody(req, taskCreateSchema);
 
-  const list = await db.list.findFirst({ where: { id: data.listId, userId: user.id } });
-  if (!list) throw notFound("List");
+  const { list } = await requireListRole(user.id, data.listId, "EDITOR");
 
   const last = await db.task.aggregate({
     where: { listId: list.id },
@@ -70,8 +64,10 @@ export const POST = route(async (req) => {
       notes: notes || null,
       dueDate: fromDateOnly(dueDate),
       position: (last._max.position ?? -1) + 1,
-      userId: user.id,
+      createdById: user.id,
+      legacyUserId: user.id, // keeps the previous deployment working mid-deploy; see schema
     },
+    include: taskInclude,
   });
 
   return NextResponse.json({ task: toTaskDTO(task) }, { status: 201 });

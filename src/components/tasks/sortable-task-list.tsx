@@ -22,10 +22,10 @@ import { useReorderTasks } from "@/hooks/use-tasks";
 import type { TaskDTO } from "@/lib/types";
 import { TaskItem } from "./task-item";
 
-type Props = { listId: string; tasks: TaskDTO[]; today: string };
+type Props = { listId: string; tasks: TaskDTO[]; today: string; showCreator?: boolean };
 
 /** Open tasks of one list, reorderable with mouse, touch or keyboard (Space, arrows, Space). */
-export function SortableTaskList({ listId, tasks, today }: Props) {
+export function SortableTaskList({ listId, tasks, today, showCreator }: Props) {
   const reorder = useReorderTasks(listId);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -47,14 +47,15 @@ export function SortableTaskList({ listId, tasks, today }: Props) {
       onDragEnd={onDragEnd}
       accessibility={{
         screenReaderInstructions: {
-          draggable: "To reorder, press Space. Use the arrow keys to move, Space to drop, Escape to cancel.",
+          draggable:
+            "To reorder, press Space. Use the arrow keys to move, Space to drop, Escape to cancel.",
         },
       }}
     >
       <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
         <ul className="space-y-2">
           {tasks.map((task) => (
-            <SortableTask key={task.id} task={task} today={today} />
+            <SortableTask key={task.id} task={task} today={today} showCreator={showCreator} />
           ))}
         </ul>
       </SortableContext>
@@ -62,7 +63,15 @@ export function SortableTaskList({ listId, tasks, today }: Props) {
   );
 }
 
-function SortableTask({ task, today }: { task: TaskDTO; today: string }) {
+function SortableTask({
+  task,
+  today,
+  showCreator,
+}: {
+  task: TaskDTO;
+  today: string;
+  showCreator?: boolean;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     disabled: task.id.startsWith("temp-"),
@@ -73,6 +82,7 @@ function SortableTask({ task, today }: { task: TaskDTO; today: string }) {
       ref={setNodeRef}
       task={task}
       today={today}
+      showCreator={showCreator}
       isDragging={isDragging}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       dragHandleProps={{ ...attributes, ...listeners }}

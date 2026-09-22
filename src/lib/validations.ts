@@ -66,13 +66,12 @@ export const listCreateSchema = z.object({
 
 // Separate from the create schema on purpose: `.partial()` would keep the color default,
 // so renaming a list would silently reset its color.
-export const listUpdateSchema = z.object({
-  name: listName.optional(),
-  color: z.enum(LIST_COLORS).optional(),
-}).refine(
-  (v) => Object.keys(v).length > 0,
-  "Nothing to update",
-);
+export const listUpdateSchema = z
+  .object({
+    name: listName.optional(),
+    color: z.enum(LIST_COLORS).optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, "Nothing to update");
 
 /** Calendar date in YYYY-MM-DD form (due dates have no time or timezone). */
 const dateOnly = z.iso.date("Use the YYYY-MM-DD date format");
@@ -105,11 +104,18 @@ export const taskQuerySchema = z.object({
   today: dateOnly.optional(),
 });
 
+export const MEMBER_ROLES = ["EDITOR", "VIEWER"] as const;
+export type MemberRoleValue = (typeof MEMBER_ROLES)[number];
+
+export const inviteSchema = z.object({ email, role: z.enum(MEMBER_ROLES) });
+export const memberRoleSchema = z.object({ role: z.enum(MEMBER_ROLES) });
+
 export const reorderSchema = z.object({
   listId: z.string().min(1),
   orderedIds: z.array(z.string().min(1)).min(1).max(1000),
 });
 
+export type InviteInput = z.infer<typeof inviteSchema>;
 export type PasswordChangeInput = z.infer<typeof passwordChangeSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
